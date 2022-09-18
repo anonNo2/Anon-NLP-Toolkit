@@ -1,25 +1,27 @@
 # language (日志啥的语言类型)
 language: zh
 # task type(ner,cls,generate)
-type: CLS
-model: bert
-struct: bertSoftmax
+type: GEN
+model: T5-Pegasus
+struct: T5-ConditionalGeneration-QA
 # required params (常规必备参数)
 base: 
-  task_name: cls_test_bs_augeda
-  data_dir: /data1/anon/Anon-NLP-Toolkit/datasets/waimai_csv
-  model_name_or_path: /data1/PRETRAIN_MODEL/bert-base-chinese
-  output_dir: /data1/anon/BERT-NER-Pytorch/outputs/cls_waimai_c
-  cache_dir: /data1/anon/BERT-NER-Pytorch/outputs/cache
+  task_name: gen_test_QA
+  data_dir: /data1/anon/Anon-NLP-Toolkit/datasets/gen_QA/medical_QA
+  model_name_or_path: /data1/anon/crosstalk-generation/pretrain_model/chinese_t5_pegasus_small
+  output_dir: /data1/anon/Anon-NLP-Toolkit/data_reducer/out_dir
+  cache_dir: /data1/anon/Anon-NLP-Toolkit/data_reducer/cache_dir
   train_max_seq_len: 128
   eval_max_seq_len: 128
+  train_max_utterance_len: 64
+  eval_max_utterance_len: 64
   do_train: true
   do_eval: true
   do_predict: false
   evaluate_during_training: true
   do_lower_case: true
-  per_gpu_train_batch_size: 64
-  per_gpu_eval_batch_size: 64
+  per_gpu_train_batch_size: 16
+  per_gpu_eval_batch_size: 16
   gradient_accumulation_steps: 1
   learning_rate: 0.00005
   weight_decay: 0.01
@@ -28,8 +30,8 @@ base:
   num_train_epochs: 1
   max_steps: -1
   warmup_proportion: 0.1
-  logging_steps: 40
-  save_steps: 40
+  logging_steps: 20
+  save_steps: 20
   eval_all_checkpoints: true
   predict_checkpoints: 40
   no_cuda: false
@@ -42,12 +44,20 @@ base:
   server_ip:
   server_port:
 
+
+
 # (adversarial training params) 对抗训练参数
 adversarial:
   do_adv: true
   adv_epsilon: 1.0
   adv_name: word_embeddings
 
+
+gen_special:
+  # 是否要在保存每一个ckpt之前进行text评估（bleu,rouge,distinct,gleu）
+  text_eval_before_save: true
+  # 如果存在多个问题，该如何选择 0-用最长的，1-都用
+  muti_question_strategy: 0
 
   
 

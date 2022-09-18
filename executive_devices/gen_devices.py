@@ -1,3 +1,4 @@
+from asyncio.log import logger
 from pickletools import optimize
 from callback import optimizater
 from callback.progressbar import ProgressBar
@@ -10,6 +11,7 @@ from callback.optimizater.adamw import AdamW
 import os,json,io
 import numpy as np
 from metrics.cls_metrics import SeqClsScore
+from metrics.gen_metrics import T5AQGenScore, T5DialogueGenScore
 from metrics.ner_metrics import SeqEntityScore, SpanEntityScore
 from processors.ner_common_processors import entity_tag_extractor
 
@@ -22,7 +24,7 @@ class GenExecDevice(ExecutiveDevice):
         raise NotImplementedError()
     
     def get_model_input(self,batch,type):
-        return {"input_ids": batch[0], "attention_mask": batch[1], "labels": batch[3] if type != 'predict' else None}
+        return {"input_ids": batch[0], "labels": batch[3] if type != 'predict' else None}
     
     def get_metrics(self,context_config):
         raise NotImplementedError()
@@ -82,25 +84,10 @@ class GenExecDevice(ExecutiveDevice):
             os.makedirs(pred_output_dir)
         
         self.predict_preparatory(context_config)
-        # Eval!
-        logger.info(f"***** Running prediction {prefix} *****")
-        logger.info(f"  Num examples = {len(context.test_dataset)}")
-        logger.info(f"  Batch size = 1")
-        results = []
-        output_predict_file = os.path.join(pred_output_dir, prefix, "test_prediction.json")
-        pbar = ProgressBar(n_total=len(context.test_dataloader), desc="Predicting")
-
-        if isinstance(model, nn.DataParallel):
-            model = model.module
-        for step, batch in enumerate(context.test_dataloader):
-            model.eval()
-            json_d = self.predict_batch_step(context_config,batch,step)
-            results.append(json_d)
-            pbar(step)
-        logger.info("\n")
-        with open(output_predict_file, "w") as writer:
-            for record in results:
-                writer.write(json.dumps(record) + '\n')
+        metric_score = self.get_metrics(context_config)
+        gen_data_file_path = metric_score.get_machine_metric_datas(model,context.output_dir,'test')
+        metric_score.calculate_machine_metrics(gen_data_file_path,context.output_dir,'test')
+        
 
     def train_epoch(self,context_config,pbar):
         args = context_config.base
@@ -133,6 +120,16 @@ class GenExecDevice(ExecutiveDevice):
                         # Only evaluate when single GPU otherwise metrics may not average well
                         self.eval_step(context_config,args.task_name)
                 if args.local_rank in [-1, 0] and args.save_steps > 0 and context.global_step % args.save_steps == 0:
+                    if context_config.gen_special.text_eval_before_save:
+                        metric_score = self.get_metrics(context_config)
+                        
+                        # Save model checkpoint
+                        output_dir = os.path.join(context.output_dir, "checkpoint-{}".format(context.global_step))
+                        if not os.path.exists(output_dir):
+                            os.makedirs(output_dir)
+                        gen_data_file_path = metric_score.get_machine_metric_datas(model,output_dir,'dev')
+                        metric_score.calculate_machine_metrics(gen_data_file_path,output_dir,'dev')
+                        
                     self.save_ckpt(context_config,model)
 
     def train_batch_step(self,context_config,batch,optimizer):
@@ -142,9 +139,7 @@ class GenExecDevice(ExecutiveDevice):
         
         batch = tuple(t.to(context.device) for t in batch)
         inputs = self.get_model_input(batch,'train')
-        if context_config.model != "distilbert":
-            # XLM and RoBERTa don"t use segment_ids
-            inputs["token_type_ids"] = (batch[2] if context_config.model in ["bert", "xlnet"] else None)
+        
         outputs = model(**inputs)
         loss = outputs[0]  # model outputs are always tuple in pytorch-transformers (see doc)
         if context.n_gpu > 1:
@@ -172,19 +167,15 @@ class GenExecDevice(ExecutiveDevice):
         batch = tuple(t.to(context.device) for t in batch)
         with torch.no_grad():
             inputs = self.get_model_input(batch,'eval')
-            if context_config.model != "distilbert":
-                # XLM and RoBERTa don"t use segment_ids
-                inputs["token_type_ids"] = (batch[2] if context_config.model in ["bert", "xlnet"] else None)
+            
             outputs = model(**inputs)
             tmp_eval_loss, logits = outputs[:2]
-            tags = self.get_eval_tags(model,logits,inputs)
+            
         if context.n_gpu > 1:
             tmp_eval_loss = tmp_eval_loss.mean()  # mean() to average on multi-gpu parallel evaluating
         eval_loss += tmp_eval_loss.item()
         nb_eval_steps += 1
-        out_label_ids = np.argmax(inputs['labels'].cpu().numpy(),axis=-1).tolist()
-        
-        metric.update(tags,out_label_ids)
+        metric.update(preds=logits, labels=inputs['labels'])
         
         return eval_loss,nb_eval_steps
 
@@ -214,14 +205,11 @@ class GenExecDevice(ExecutiveDevice):
 
 
 
-class T5PegasusExecDevice(GenExecDevice):
+class T5GenExecDevice(GenExecDevice):
 
-    def get_metrics(self,context_config):
-        return SeqClsScore(context_config.context.id2label)
     
     def get_eval_tags(self,model,logits,inputs):
-        tags = np.argmax(logits.cpu().numpy(), axis=1).tolist()
-        return tags
+        return
 
     def get_optimizer_grouped_parameters(self,context_config):
         args = context_config.base
@@ -229,11 +217,27 @@ class T5PegasusExecDevice(GenExecDevice):
         model = context.model
 
         # Prepare optimizer and schedule (linear warmup and decay)
-        no_decay = ["bias", "LayerNorm.weight"]
+        no_decay = ["layer_norm.weight"]
         optimizer_grouped_parameters = [
             {"params": [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
             "weight_decay": args.weight_decay,},
             {"params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)], "weight_decay": 0.0},
         ]
         return optimizer_grouped_parameters
+
+
+class T5PegasusExecDevice(T5GenExecDevice):
+
+    def get_metrics(self,context_config):
+        return T5DialogueGenScore(context_config)
+    
+
+class T5QAExecDevice(T5GenExecDevice):
+
+    def get_metrics(self,context_config):
+        return T5AQGenScore(context_config)
+    
+
+
+
     

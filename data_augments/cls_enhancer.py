@@ -5,7 +5,7 @@ from asyncio.log import logger
 import random
 from statistics import mean
 from data_augments.enhancer_inter import Enhancer
-from processors.ner_common_processors import LabelInputExample
+from processors.commmon_examples import LabelInputExample
 
 
 class ClsEnhancer(Enhancer):

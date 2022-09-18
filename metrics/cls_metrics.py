@@ -1,6 +1,6 @@
 import torch
 from collections import Counter
-from processors.ner_common_processors import entity_tag_extractor
+
 from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
 
 

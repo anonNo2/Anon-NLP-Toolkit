@@ -26,11 +26,12 @@ from callback.lr_scheduler import get_linear_schedule_with_warmup
 from callback.progressbar import ProgressBar
 from callback.t5_tokenizer import T5PegasusTokenizer
 from executive_devices.cls_devices import SoftmaxClsExecDevice
+from executive_devices.gen_devices import T5PegasusExecDevice, T5QAExecDevice
 from executive_devices.ner_devices import BertBilstmCrfNerExecDevice,BertCrfNerExecDevice,SoftmaxNerExecDevice,SpanNerExecDevice
 from models.bert_for_cls import BertForNormalCls
 from processors.cls_seq import AutoClsProcessor
 from models.bert_for_ner import BertBiLSTMCrfForNer, BertCrfForNer, BertSoftmaxForNer, BertSpanForNer
-from processors.gen_seq import AutoGenProcessor
+from processors.gen_seq import AutoGenDialogueProcessor, AutoGenQAProcessor
 from processors.ner_seq import AutoNerProcessor
 from processors.ner_span import AutoSpanProcessor
 from tools.common import seed_everything,json_to_text
@@ -55,7 +56,10 @@ Main_Struct_Dict = {
         }
     },
     'GEN':{
-        'T5-Pegasus':(MT5Config, MT5ForConditionalGeneration, T5PegasusTokenizer,AutoGenProcessor,T5PegasusExecDevice)
+        'T5-Pegasus': {
+            'T5-ConditionalGeneration-Dialogue':(MT5Config, MT5ForConditionalGeneration, T5PegasusTokenizer,AutoGenDialogueProcessor,T5PegasusExecDevice),
+            'T5-ConditionalGeneration-QA':(MT5Config, MT5ForConditionalGeneration, T5PegasusTokenizer,AutoGenQAProcessor,T5QAExecDevice)
+        }
     }
 }
 
@@ -121,6 +125,8 @@ class MainController():
                                                     label_list=label_list,
                                                     max_seq_length=args.base.train_max_seq_len if data_type == 'train' \
                                                         else args.base.eval_max_seq_len,
+                                                    max_utterance_length=args.base.get('train_max_utterance_len',0) if data_type == 'train' \
+                                                        else args.base.get('eval_max_utterance_len',0),
                                                     cls_token_at_end=bool(args.model in ["xlnet"]),
                                                     pad_on_left=bool(args.model in ['xlnet']),
                                                     cls_token=tokenizer.cls_token,
@@ -131,8 +137,10 @@ class MainController():
                                                     pad_token_segment_id=4 if args.model in ['xlnet'] else 0,
                                                     )
             if args.base.local_rank in [-1, 0]:
+                
                 logger.info(f"将特征文件保存在{cached_features_file}",f"Saving features into cached file {cached_features_file}")
-                torch.save(features, cached_features_file)
+                # 暂时，因为这个存取似乎比解析还慢
+                # torch.save(features, cached_features_file)
         if args.base.local_rank == 0 :
             torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
         # Convert to Tensors and build dataset
@@ -360,4 +368,4 @@ class MainController():
 
 
 if __name__ == "__main__":
-    MainController('/data1/anon/Anon-NLP-Toolkit/configs/Cls_conf.yaml')()
+    MainController('/data1/anon/Anon-NLP-Toolkit/configs/Gen_T5_QA_conf.yaml')()

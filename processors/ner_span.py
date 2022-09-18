@@ -5,7 +5,10 @@ import logging
 import os,io
 import copy
 import json
-from .ner_common_processors import DataProcessor,EntityTagExtractor,SubjectInputExample,SubjectInputFeature
+
+from processors.common_processor_inter import DataProcessor
+from processors.ner_common_processors import EntityTagExtractor
+from .commmon_examples import SubjectInputExample,SubjectInputFeature
 from torch.utils.data import TensorDataset
 logger = logging.getLogger(__name__)
 
@@ -119,7 +122,7 @@ class AutoSpanProcessor(DataProcessor):
         return self.train_collate_fn(batch)
 
 
-    def convert_examples_to_features(self,examples,label_list,max_seq_length,tokenizer,
+    def convert_examples_to_features(self,examples,label_list,max_seq_length,tokenizer,max_utterance_length=64,
                                     cls_token_at_end=False,cls_token="[CLS]",cls_token_segment_id=1,
                                     sep_token="[SEP]",pad_on_left=False,pad_token=0,pad_token_segment_id=0,
                                     sequence_a_segment_id=0,mask_padding_with_zero=True,):

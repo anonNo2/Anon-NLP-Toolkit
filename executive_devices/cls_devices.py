@@ -10,8 +10,8 @@ from callback.optimizater.adamw import AdamW
 import os,json,io
 import numpy as np
 from metrics.cls_metrics import SeqClsScore
-from metrics.ner_metrics import SeqEntityScore, SpanEntityScore
-from processors.ner_common_processors import entity_tag_extractor
+
+
 
 
 

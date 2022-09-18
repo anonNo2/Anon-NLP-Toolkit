@@ -5,7 +5,8 @@ import os,io
 import copy
 import json
 from torch.utils.data import TensorDataset
-from processors.ner_common_processors import DataProcessor,LabelInputFeatures,LabelInputExample
+from processors.common_processor_inter import DataProcessor
+from processors.commmon_examples import LabelInputFeatures,LabelInputExample
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +76,7 @@ class AutoNerProcessor(DataProcessor):
             examples.append(LabelInputExample(guid=guid, text_a=text_a, labels=labels))
         return examples
 
-    def convert_examples_to_features(self,examples,label_list,max_seq_length,tokenizer,
+    def convert_examples_to_features(self,examples,label_list,max_seq_length,tokenizer,max_utterance_length=64,
                                  cls_token_at_end=False,cls_token="[CLS]",cls_token_segment_id=1,
                                  sep_token="[SEP]",pad_on_left=False,pad_token=0,pad_token_segment_id=0,
                                  sequence_a_segment_id=0,mask_padding_with_zero=True,):
