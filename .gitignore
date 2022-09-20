@@ -109,4 +109,5 @@ outputs
 __pycache__
 datasets
 data_reducer
+*.logs
 

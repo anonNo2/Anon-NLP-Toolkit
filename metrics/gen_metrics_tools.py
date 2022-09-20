@@ -76,7 +76,11 @@ def calculate_rouge_score(reference, hypothesis):
     rouge = Rouge()
     scores = []
     for ref,hyp in zip(reference,hypothesis):
-         scores.append(rouge.get_scores(' '.join([i for i in hyp]), ' '.join([i for i in ref])))
+        hyp = [i for i in hyp if len(i) > 0]
+        ref = [i for i in ref if len(i) > 0]
+        if not len(hyp) or not len(ref):
+            continue
+        scores.append(rouge.get_scores(' '.join([i for i in hyp]), ' '.join([i for i in ref])))
     rouge_1 = [i[0]['rouge-1']['f'] for i in scores]
     rouge_2 = [i[0]['rouge-2']['f'] for i in scores]
     rouge_l = [i[0]['rouge-l']['f'] for i in scores]

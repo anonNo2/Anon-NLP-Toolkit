@@ -10,8 +10,10 @@ Copyright (c) 2022 by anon/Ultrapower, All Rights Reserved.
 '''
 import glob
 import logging
+from multiprocessing import context
 import os
 import json
+from random import shuffle
 import time
 from typing import Any
 from shutil import copyfile
@@ -73,6 +75,9 @@ class MainController():
     def __init__(self,conf_path) :
         self.conf_path = conf_path
         self.config = load_cfg(conf_path)
+        if not os.path.exists(self.config.base.output_dir):
+            os.makedirs(self.config.base.output_dir)
+        
         self.importance_ref = Main_Struct_Dict[self.config.type][self.config.model][self.config.struct]
         self.data_preduce_func = {
             'NER':self.ner_task_data_prepare,
@@ -81,8 +86,22 @@ class MainController():
         }
         self.config['context'] = munch.Munch({})
 
+    def load_examples(self, data_type='train'):
+        args = self.config
+        processor =args.context.processor
+        
+        label_list = processor.get_labels(args.base.data_dir)
+        if data_type == 'train':
+            examples = processor.get_train_examples(args.base.data_dir)
+        elif data_type == 'dev':
+            examples = processor.get_dev_examples(args.base.data_dir)
+        else:
+            examples = processor.get_test_examples(args.base.data_dir)
+        
+        return examples,label_list
+
     
-    def load_and_cache_examples(self, task, tokenizer, data_type='train'):
+    def covert_examples_to_tensors(self, task, tokenizer,examples, label_list, data_type='train',shard_start_idx=0,shard_size=0):
         '''
         load datafile and cache it
         加载并缓存数据文件
@@ -94,7 +113,9 @@ class MainController():
         processor =args.context.processor
         tag = args.struct
         # Load data features from cache or dataset file
-        cached_features_file = os.path.join(args.base.data_dir, 'cached_{}-{}_{}_{}_{}'.format(
+        cached_features_file = os.path.join(args.base.data_dir, '{}-{}_cached_{}-{}_{}_{}_{}'.format(
+            shard_start_idx,
+            shard_size,
             tag,
             data_type,
             list(filter(None, args.base.model_name_or_path.split('/'))).pop(),
@@ -112,13 +133,6 @@ class MainController():
                 f"Creating features from dataset file at {args.base.data_dir}"
 
             )
-            label_list = processor.get_labels(args.base.data_dir)
-            if data_type == 'train':
-                examples = processor.get_train_examples(args.base.data_dir)
-            elif data_type == 'dev':
-                examples = processor.get_dev_examples(args.base.data_dir)
-            else:
-                examples = processor.get_test_examples(args.base.data_dir)
 
             features = processor.convert_examples_to_features(examples=examples,
                                                     tokenizer=tokenizer,
@@ -156,7 +170,7 @@ class MainController():
         tag = args.model + '_' + args.struct
         if not os.path.exists(args.base.output_dir):
             os.mkdir(args.base.output_dir)
-        args.context.output_dir = os.path.join(args.base.output_dir,tag)
+        args.context.output_dir = os.path.join(args.base.output_dir,tag,args.base.task_name)
         if not os.path.exists(args.context.output_dir):
             os.mkdir(args.context.output_dir)
         time_ = time.strftime("%Y-%m-%d-%H:%M:%S", time.localtime())
@@ -212,7 +226,7 @@ class MainController():
         args.context.config = config_class.from_pretrained(args.base.model_name_or_path,num_labels=len(label_list),)
         
 
-    def load_model_and_datasets(self):
+    def load_model(self):
         args = self.config
         # 在分布式训练时，保证只有主进程加载预训练语言模型和词表
         # Make sure only the first process in distributed training will download model & vocab
@@ -234,14 +248,30 @@ class MainController():
         
         args.context.model.to(args.context.device)
         
-        if args.base.do_train:
-            args.context.train_dataset = self.load_and_cache_examples(args.base.task_name, args.context.tokenizer, data_type='train')
+    def load_dev_and_predict_datasets(self):
+        args = self.config
+        
         if args.base.do_eval or args.base.evaluate_during_training :
-            args.context.eval_dataset = self.load_and_cache_examples(args.base.task_name, args.context.tokenizer, data_type='dev')
+            examples,label_list = self.load_examples(data_type='dev')
+            args.context.eval_dataset = self.covert_examples_to_tensors(args.base.task_name, args.context.tokenizer,examples,label_list, data_type='dev')
         if args.base.do_predict:
-            args.context.test_dataset = self.load_and_cache_examples(args.base.task_name, args.context.tokenizer, data_type='predict')
-         
-                
+            examples,label_list = self.load_examples(data_type='predict')
+            args.context.test_dataset = self.covert_examples_to_tensors(args.base.task_name, args.context.tokenizer,examples,label_list, data_type='predict')
+    
+
+
+    def load_datasets_complete(self):
+        args = self.config
+        if args.base.do_train:
+
+            examples,label_list = self.load_examples(data_type='train')
+            self.config.context.shard_start = 0
+            self.config.context.shard_end = len(examples)
+            self.config.context.all_examples_size = len(examples)
+            args.context.train_dataset = self.covert_examples_to_tensors(args.base.task_name, args.context.tokenizer,examples,label_list, data_type='train')
+        self.load_dev_and_predict_datasets()
+       
+                  
     
     def ner_task_data_prepare(self):
         '''
@@ -293,16 +323,19 @@ class MainController():
         # Saving best-practices: if you use defaults names for the model, you can reload it using from_pretrained()
         if args.base.do_train and (args.base.local_rank == -1 or torch.distributed.get_rank() == 0):
             # Create output directory if needed
-            if not os.path.exists(args.base.output_dir) and args.base.local_rank in [-1, 0]:
-                os.makedirs(args.base.output_dir)
-            logger.info(f"Saving model checkpoint to {args.base.output_dir}")
+            save_train_final_results = os.path.join(args.context.output_dir,'shard_model_dir',f'shard_#{args.context.shard_start}-{args.context.shard_end}#-{args.context.all_examples_size}-step#{args.context.global_step}#')
+            if not os.path.exists(save_train_final_results) and args.base.local_rank in [-1, 0]:
+                os.makedirs(save_train_final_results)
+            logger.info(f"Saving model checkpoint to {save_train_final_results}")
             # Save a trained model, configuration and tokenizer using `save_pretrained()`.
             # They can then be reloaded using `from_pretrained()`
             model_to_save = (
                 model.module if hasattr(model, "module") else model
             )  # Take care of distributed/parallel training
-            model_to_save.save_pretrained(args.base.output_dir)
-            tokenizer.save_vocabulary(args.base.output_dir)
+            model_to_save.save_pretrained(save_train_final_results)
+            torch.save(self.config.context.optimizer.state_dict(), os.path.join(save_train_final_results, "optimizer.pt"))
+            torch.save(self.config.context.scheduler.state_dict(), os.path.join(save_train_final_results, "scheduler.pt"))
+            tokenizer.save_vocabulary(save_train_final_results)
         # Evaluation
         results = {}
         if args.base.do_eval and args.base.local_rank in [-1, 0]:
@@ -357,9 +390,35 @@ class MainController():
         # 不同任务的数据预处理部分 Data preprocessing for different tasks
         self.data_preduce_func[self.config.type]()
         # 加载模型和数据
-        self.load_model_and_datasets()
-        # 不同任务的主运行部分 Main running step for different tasks
-        self.main_running_step()
+        self.load_model()
+
+        if 'big_data' in self.config and self.config.big_data.need_split_shard:
+            task_name = self.config.base.task_name
+            tokenizer = self.config.context.tokenizer
+            
+            examples,label_list = self.load_examples(data_type='train')
+            self.config.context.all_examples_size = len(examples)
+            shard_size = self.config.big_data.shard_size
+            self.load_dev_and_predict_datasets()
+            if self.config.big_data.shuffle_before_split:
+                shuffle(examples)
+            for idx in range(0,len(examples),shard_size):
+                shard_examples = examples[idx:idx + shard_size]
+                self.config.context.train_dataset = self.covert_examples_to_tensors(task_name, tokenizer,
+                                                                            shard_examples,label_list, 
+                                                                            data_type='train',
+                                                                            shard_start_idx=idx,
+                                                                            shard_size=shard_size
+                                                                            )
+                self.config.context.shard_start = idx
+                self.config.context.shard_end = idx + shard_size
+                self.main_running_step()
+            # 不同任务的主运行部分 Main running step for different tasks
+            
+        else:
+            self.load_datasets_complete()
+            # 不同任务的主运行部分 Main running step for different tasks
+            self.main_running_step()
 
     
         pass
@@ -368,4 +427,4 @@ class MainController():
 
 
 if __name__ == "__main__":
-    MainController('/data/anon/anon-nlp-toolkit/configs/Gen_T5_QA_conf_medical.yaml')()
+    MainController('/data/anon/anon-nlp-toolkit/configs_bigdata/Gen_T5_QA_conf_medical.yaml')()

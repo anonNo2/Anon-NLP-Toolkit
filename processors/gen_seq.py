@@ -41,20 +41,23 @@ class AutoGenBaseProcessor(DataProcessor):
         return []
     ## TEMP /S
     def get_train_examples(self, data_dir):
-        return self.get_examples_common(data_dir, "train")
+        all_train_examples = self.get_examples_common(data_dir, "train")
+        return all_train_examples
     
     def get_dev_examples(self, data_dir):
-        return self.get_examples_common(data_dir, "dev")
+        all_dev_examples = self.get_examples_common(data_dir, "dev")
+        return all_dev_examples
 
     def get_test_examples(self, data_dir):
-        return self.get_examples_common(data_dir, "test")
+        all_test_examples = self.get_examples_common(data_dir, "test")
+        return all_test_examples
     ## TEMP /E
 
     def _create_gen_examples(self, lines, set_type):
         """Creates examples for the training and dev sets."""
         examples = []
 
-        lines = lines[:1000 if set_type == 'train' else 100]
+        # lines = lines[:10000 if set_type == 'train' else 1000]
         for (i, line) in enumerate(lines):
             guid = "%s-%s" % (set_type, i)
             examples.append(GenDialogueInputExample(guid=guid, chapter=line))
@@ -208,7 +211,7 @@ class AutoGenDialogueProcessor(AutoGenBaseProcessor):
                 assert len(input_mask) == max_seq_length
                 assert len(segment_ids) == max_seq_length
                 
-                if ex_index < 1:
+                if ex_index < 1 and self.args.base.print_data_examples:
                     logger.info("*** Example ***")
                     logger.info("guid: %s", example.guid)
                     logger.info("tokens: %s", " ".join([str(x) for x in input_toks]))
@@ -220,7 +223,7 @@ class AutoGenDialogueProcessor(AutoGenBaseProcessor):
                     
 
                 features.append(LabelInputFeatures(input_ids=input_ids, input_mask=input_mask,
-                                            segment_ids=segment_ids, label_ids=labels_ids,input_len=input_lens))
+                                            segment_ids=segment_ids, label_ids=labels_ids,input_len=input_lens,input_toks=input_toks,label_toks=labels_tok))
 
     
                 
@@ -266,14 +269,18 @@ class AutoGenQAProcessor(AutoGenBaseProcessor):
         cls_tok = tokenizer.cls_token
         features = []
 
+
+
         for (ex_index, example) in enumerate(examples):
             if ex_index % 10000 == 0:
                 logger.info("Writing example %d of %d", ex_index, len(examples))
             
             chapter = example.chapter
+            if len(chapter) < 3 and '\t' not in chapter :
+                continue
             splitor_ = chapter.split('\t')
             question = splitor_[0]
-            answer = splitor_[1][:max_utterance_length - 2]
+            answer = splitor_[1][:max_seq_length - 2]
 
             if '@' in question:
                 questions = [i[:max_utterance_length - 2] for i in question.split('@')]
@@ -289,8 +296,9 @@ class AutoGenQAProcessor(AutoGenBaseProcessor):
             answer_ids = tokenizer.convert_tokens_to_ids([i for i in answer]) + [sep_id]
             for quest_str in questions:
                 input_ids = [cls_id] + tokenizer.convert_tokens_to_ids([i for i in quest_str]) + [sep_id]
-        
+                input_toks = [cls_tok] + [i for i in quest_str] + [sep_tok]
                 labels_ids = [cls_id] + answer_ids
+                label_toks = [cls_tok] + [i for i in answer] + [sep_tok]
                 # quest_str最后还要拼接一个sep，这个也算上
                 segment_ids = [cls_token_segment_id] + (len(quest_str) + 1) * [sequence_a_segment_id]
 
@@ -301,19 +309,22 @@ class AutoGenQAProcessor(AutoGenBaseProcessor):
 
                 if cls_token_at_end:
                     input_ids = input_ids[1:] + input_ids[:1]
+                    input_toks = input_toks[1:] + input_toks[:1]
                     segment_ids += segment_ids[1:] + segment_ids[:1]
+                    labels_ids = labels_ids[1:] + labels_ids[:1]
+                    label_toks = label_toks[1:] + label_toks[:1]
                 
                 # Zero-pad up to the sequence length.
                 padding_length = max_seq_length - input_lens
                 if pad_on_left:
                     input_ids = ([pad_token] * padding_length) + input_ids
-                    labels_ids = ([-100] * (max_utterance_length - len(labels_ids))) + labels_ids
+                    labels_ids = ([-100] * (max_seq_length - len(labels_ids))) + labels_ids
                     input_mask = ([0 if mask_padding_with_zero else 1] * padding_length) + input_mask
                     segment_ids = ([pad_token_segment_id] * padding_length) + segment_ids
                     
                 else:
                     input_ids += [pad_token] * padding_length
-                    labels_ids += ([-100] * (max_utterance_length - len(labels_ids))) 
+                    labels_ids += ([-100] * (max_seq_length - len(labels_ids))) 
                     input_mask += [0 if mask_padding_with_zero else 1] * padding_length
                     segment_ids += [pad_token_segment_id] * padding_length
                     
@@ -322,19 +333,19 @@ class AutoGenQAProcessor(AutoGenBaseProcessor):
                 assert len(input_mask) == max_seq_length
                 assert len(segment_ids) == max_seq_length
                 
-                if ex_index < 1:
+                if ex_index < 1  and self.args.base.print_data_examples:
                     logger.info("*** Example ***")
                     logger.info("guid: %s", example.guid)
-                    logger.info("tokens: %s", " ".join([str(x) for x in quest_str]))
+                    logger.info("tokens: %s", " ".join([str(x) for x in input_toks]))
                     logger.info("input_ids: %s", " ".join([str(x) for x in input_ids]))
                     logger.info("input_mask: %s", " ".join([str(x) for x in input_mask]))
                     logger.info("segment_ids: %s", " ".join([str(x) for x in segment_ids]))
-                    logger.info("label_tokens: %s", " ".join([str(x) for x in answer]))
+                    logger.info("label_tokens: %s", " ".join([str(x) for x in label_toks]))
                     logger.info("label_ids: %s", " ".join([str(x) for x in labels_ids]))
                     
 
                 features.append(LabelInputFeatures(input_ids=input_ids, input_mask=input_mask,
-                                            segment_ids=segment_ids, label_ids=labels_ids,input_len=input_lens))
+                                            segment_ids=segment_ids, label_ids=labels_ids,input_len=input_lens,input_toks=input_toks,label_toks=label_toks))
 
     
                 

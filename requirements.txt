@@ -1,2 +1,8 @@
+torch==1.12.0
 transformers==4.20.1
 munch==2.5.0
+jieba==0.42.1
+nltk==3.7
+sklearn
+rouge==1.0.1
+pandas

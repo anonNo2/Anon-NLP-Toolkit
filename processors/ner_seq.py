@@ -154,7 +154,7 @@ class AutoNerProcessor(DataProcessor):
             assert len(input_mask) == max_seq_length
             assert len(segment_ids) == max_seq_length
             assert len(label_ids) == max_seq_length
-            if ex_index < 5:
+            if ex_index < 5  and self.args.base.print_data_examples:
                 logger.info("*** Example ***")
                 logger.info("guid: %s", example.guid)
                 logger.info("tokens: %s", " ".join([str(x) for x in tokens]))

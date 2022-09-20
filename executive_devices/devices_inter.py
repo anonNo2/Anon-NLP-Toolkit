@@ -35,7 +35,7 @@ class ExecutiveDevice():
         context.eval_dataloader = DataLoader(context.eval_dataset, sampler=context.eval_sampler, batch_size=context.eval_batch_size,
                                     collate_fn=context.processor.dev_collate_fn)
 
-    def train_preparatory(self,context_config,optimizer_grouped_parameters):
+    def train_preparatory(self,context_config,optimizer_grouped_parameters,global_step=0):
         '''
         训练前的公共准备部分
         '''
@@ -82,7 +82,7 @@ class ExecutiveDevice():
         
 
         # Train!
-        logger.info("***** Running training *****")
+        logger.info(f"***** Running training {context.shard_start}~{context.shard_end}*****")
         logger.info(f"  Num examples = {len(context.train_dataset)}")
         logger.info(f"  Num Epochs = {args.num_train_epochs}")
         logger.info(f"  Instantaneous batch size per GPU = {args.per_gpu_train_batch_size}")
@@ -92,7 +92,7 @@ class ExecutiveDevice():
         logger.info(f"  Gradient Accumulation steps = {args.gradient_accumulation_steps}")
         logger.info(f"  Total optimization steps = {context.t_total}")
 
-        global_step = 0
+        
         steps_trained_in_current_epoch = 0
         context.global_step = global_step
         context.steps_trained_in_current_epoch = steps_trained_in_current_epoch
@@ -132,7 +132,7 @@ class ExecutiveDevice():
         context = context_config.context
         model = context.model
         
-        self.train_preparatory(context_config,self.get_optimizer_grouped_parameters(context_config))
+        self.train_preparatory(context_config,self.get_optimizer_grouped_parameters(context_config),global_step=context.get('global_step',0))
         
         context.tr_loss, context.logging_loss = 0.0, 0.0
         if context_config.adversarial.do_adv:
@@ -140,11 +140,11 @@ class ExecutiveDevice():
         model.zero_grad()
         train_dataloader = context.train_dataloader
         
-        pbar = ProgressBar(n_total=len(train_dataloader), desc='Training', num_epochs=int(args.num_train_epochs))
+        pbar = ProgressBar(n_total=len(train_dataloader), desc=f'Training-{context.shard_start}~{context.shard_end}', num_epochs=int(args.num_train_epochs))
         
         for epoch in range(int(args.num_train_epochs)):
             pbar.reset()
-            pbar.epoch_start(current_epoch=epoch)
+            pbar.epoch_start(current_epoch=epoch+1)
             self.train_epoch(context_config,pbar)
             if 'cuda' in str(context.device):
                 torch.cuda.empty_cache()

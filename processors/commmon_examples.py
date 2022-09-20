@@ -61,11 +61,13 @@ class LabelInputExample(object):
 
 class LabelInputFeatures(object):
     """A single set of features of data."""
-    def __init__(self, input_ids, input_mask, input_len,segment_ids, label_ids):
+    def __init__(self, input_ids, input_mask, input_len,segment_ids, label_ids,label_toks=None,input_toks=None):
         self.input_ids = input_ids
+        self.input_toks = input_toks
         self.input_mask = input_mask
         self.segment_ids = segment_ids
         self.label_ids = label_ids
+        self.label_toks = label_toks
         self.input_len = input_len
 
     def __repr__(self):
