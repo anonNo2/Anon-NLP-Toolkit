@@ -10,7 +10,6 @@ Copyright (c) 2022 by anon/Ultrapower, All Rights Reserved.
 '''
 import glob
 import logging
-from multiprocessing import context
 import os
 import json
 from random import shuffle
@@ -28,12 +27,12 @@ from callback.lr_scheduler import get_linear_schedule_with_warmup
 from callback.progressbar import ProgressBar
 from callback.t5_tokenizer import T5PegasusTokenizer
 from executive_devices.cls_devices import SoftmaxClsExecDevice
-from executive_devices.gen_devices import T5PegasusExecDevice, T5QAExecDevice
+from executive_devices.gen_devices import GPTQAExecDevice, T5PegasusExecDevice, T5QAExecDevice
 from executive_devices.ner_devices import BertBilstmCrfNerExecDevice,BertCrfNerExecDevice,SoftmaxNerExecDevice,SpanNerExecDevice
 from models.bert_for_cls import BertForNormalCls
 from processors.cls_seq import AutoClsProcessor
 from models.bert_for_ner import BertBiLSTMCrfForNer, BertCrfForNer, BertSoftmaxForNer, BertSpanForNer
-from processors.gen_seq import AutoGenDialogueProcessor, AutoGenQAProcessor
+from processors.gen_seq import AutoGenDecoderQAProcessor, AutoGenEncoderDecoderDialogueProcessor, AutoGenEncoderDecoderQAProcessor
 from processors.ner_seq import AutoNerProcessor
 from processors.ner_span import AutoSpanProcessor
 from tools.common import seed_everything,json_to_text
@@ -42,7 +41,7 @@ from transformers.models.mt5.modeling_mt5 import MT5Config
 from tools.config import load_cfg
 from tools.logger_entry import GlobalLogger
 from transformers.models.mt5.modeling_mt5 import MT5ForConditionalGeneration
-
+from transformers import GPT2TokenizerFast, GPT2LMHeadModel, GPT2Config,OpenAIGPTLMHeadModel
 Main_Struct_Dict = {
     'NER':{
         'bert':{
@@ -59,8 +58,11 @@ Main_Struct_Dict = {
     },
     'GEN':{
         'T5-Pegasus': {
-            'T5-ConditionalGeneration-Dialogue':(MT5Config, MT5ForConditionalGeneration, T5PegasusTokenizer,AutoGenDialogueProcessor,T5PegasusExecDevice),
-            'T5-ConditionalGeneration-QA':(MT5Config, MT5ForConditionalGeneration, T5PegasusTokenizer,AutoGenQAProcessor,T5QAExecDevice)
+            'T5-ConditionalGeneration-Dialogue':(MT5Config, MT5ForConditionalGeneration, T5PegasusTokenizer,AutoGenEncoderDecoderDialogueProcessor,T5PegasusExecDevice),
+            'T5-ConditionalGeneration-QA':(MT5Config, MT5ForConditionalGeneration, T5PegasusTokenizer,AutoGenEncoderDecoderQAProcessor,T5QAExecDevice)
+        },
+        'GPT': {
+            'GPT-ConditionalGeneration-QA': (GPT2Config,GPT2LMHeadModel,BertTokenizer,AutoGenDecoderQAProcessor,GPTQAExecDevice)
         }
     }
 }
@@ -172,7 +174,7 @@ class MainController():
             os.mkdir(args.base.output_dir)
         args.context.output_dir = os.path.join(args.base.output_dir,tag,args.base.task_name)
         if not os.path.exists(args.context.output_dir):
-            os.mkdir(args.context.output_dir)
+            os.makedirs(args.context.output_dir)
         time_ = time.strftime("%Y-%m-%d-%H:%M:%S", time.localtime())
         log_file= os.path.join(self.config.context.output_dir,f'{tag}-{self.config.type}-{time_}.log')
         self.logger = GlobalLogger(language=self.config.language,log_file=log_file)
@@ -427,4 +429,4 @@ class MainController():
 
 
 if __name__ == "__main__":
-    MainController('/data/anon/anon-nlp-toolkit/configs_bigdata/Gen_T5_QA_conf_medical.yaml')()
+    MainController('/data1/anon/Anon-NLP-Toolkit/configs_bigdata/Gen_GPT_QA_conf_medical.yaml')()

@@ -7,7 +7,7 @@ import json
 from torch.utils.data import TensorDataset
 from data_augments.cls_enhancer import ClsEnhancer
 from processors.common_processor_inter import DataProcessor
-from processors.commmon_examples import GenDialogueInputExample, LabelInputFeatures
+from processors.commmon_examples import GenInputExample, LabelInputFeatures
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +60,7 @@ class AutoGenBaseProcessor(DataProcessor):
         # lines = lines[:10000 if set_type == 'train' else 1000]
         for (i, line) in enumerate(lines):
             guid = "%s-%s" % (set_type, i)
-            examples.append(GenDialogueInputExample(guid=guid, chapter=line))
+            examples.append(GenInputExample(guid=guid, chapter=line))
         self.args.context[f'{set_type}_raw_data'] = lines
         return examples
 
@@ -94,12 +94,65 @@ class AutoGenBaseProcessor(DataProcessor):
         dataset = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_lens, all_label_ids)
         return dataset
 
+    
+    def format_postduce(self,ex_index,
+                            guid,
+                            input_ids,
+                            input_toks,
+                            segment_ids,
+                            labels_ids,
+                            label_toks,
+                            cls_token_at_end,
+                            max_seq_length,
+                            mask_padding_with_zero,
+                            pad_on_left,
+                            pad_token,
+                            pad_token_segment_id):
+        input_lens = len(input_ids)
+        input_mask = [1 if mask_padding_with_zero else 0] * input_lens
+        if cls_token_at_end:
+            input_ids = input_ids[1:] + input_ids[:1]
+            input_toks = input_toks[1:] + input_toks[:1]
+            segment_ids += segment_ids[1:] + segment_ids[:1]
+            labels_ids = labels_ids[1:] + labels_ids[:1]
+            label_toks = label_toks[1:] + label_toks[:1]
+        
+        # Zero-pad up to the sequence length.
+        padding_length = max_seq_length - input_lens
+        if pad_on_left:
+            input_ids = ([pad_token] * padding_length) + input_ids
+            labels_ids = ([-100] * (max_seq_length - len(labels_ids))) + labels_ids
+            input_mask = ([0 if mask_padding_with_zero else 1] * padding_length) + input_mask
+            segment_ids = ([pad_token_segment_id] * padding_length) + segment_ids
+            
+        else:
+            input_ids += [pad_token] * padding_length
+            labels_ids += ([-100] * (max_seq_length - len(labels_ids))) 
+            input_mask += [0 if mask_padding_with_zero else 1] * padding_length
+            segment_ids += [pad_token_segment_id] * padding_length
+            
+
+        assert len(input_ids) == max_seq_length
+        assert len(input_mask) == max_seq_length
+        assert len(segment_ids) == max_seq_length
+        
+        if ex_index < 1  and self.args.base.print_data_examples:
+            logger.info("*** Example ***")
+            logger.info("guid: %s", guid)
+            logger.info("tokens: %s", " ".join([str(x) for x in input_toks]))
+            logger.info("input_ids: %s", " ".join([str(x) for x in input_ids]))
+            logger.info("input_mask: %s", " ".join([str(x) for x in input_mask]))
+            logger.info("segment_ids: %s", " ".join([str(x) for x in segment_ids]))
+            logger.info("label_tokens: %s", " ".join([str(x) for x in label_toks]))
+            logger.info("label_ids: %s", " ".join([str(x) for x in labels_ids]))
+        return input_ids,input_toks,input_mask,segment_ids,labels_ids,label_toks,input_lens
 
 
 
 
 
-class AutoGenDialogueProcessor(AutoGenBaseProcessor):
+
+class AutoGenEncoderDecoderDialogueProcessor(AutoGenBaseProcessor):
 
 
     def __init__(self,args):
@@ -182,48 +235,26 @@ class AutoGenDialogueProcessor(AutoGenBaseProcessor):
                 # 可以通过这两行记录src和target，调试时可用
                 # content_line = json.dumps({'src':input_toks,'tgt':labels_tok},ensure_ascii=False)
                 # ids_line = json.dumps({'src':input_ids,'tgt':labels_ids},ensure_ascii=False)
-                input_lens = len(input_ids)
-                input_mask = [1 if mask_padding_with_zero else 0] * input_lens
                 
 
-                
-
-                if cls_token_at_end:
-                    input_ids = input_ids[1:] + input_ids[:1]
-                    segment_ids += segment_ids[1:] + segment_ids[:1]
-                
-                # Zero-pad up to the sequence length.
-                padding_length = max_seq_length - input_lens
-                if pad_on_left:
-                    input_ids = ([pad_token] * padding_length) + input_ids
-                    labels_ids = ([-100] * (max_utterance_length - len(labels_ids))) + labels_ids
-                    input_mask = ([0 if mask_padding_with_zero else 1] * padding_length) + input_mask
-                    segment_ids = ([pad_token_segment_id] * padding_length) + segment_ids
-                    
-                else:
-                    input_ids += [pad_token] * padding_length
-                    labels_ids += ([-100] * (max_utterance_length - len(labels_ids))) 
-                    input_mask += [0 if mask_padding_with_zero else 1] * padding_length
-                    segment_ids += [pad_token_segment_id] * padding_length
-                    
-
-                assert len(input_ids) == max_seq_length
-                assert len(input_mask) == max_seq_length
-                assert len(segment_ids) == max_seq_length
-                
-                if ex_index < 1 and self.args.base.print_data_examples:
-                    logger.info("*** Example ***")
-                    logger.info("guid: %s", example.guid)
-                    logger.info("tokens: %s", " ".join([str(x) for x in input_toks]))
-                    logger.info("input_ids: %s", " ".join([str(x) for x in input_ids]))
-                    logger.info("input_mask: %s", " ".join([str(x) for x in input_mask]))
-                    logger.info("segment_ids: %s", " ".join([str(x) for x in segment_ids]))
-                    logger.info("label_tokens: %s", " ".join([str(x) for x in labels_tok]))
-                    logger.info("label_ids: %s", " ".join([str(x) for x in labels_ids]))
+                input_ids,input_toks,input_mask,segment_ids,labels_ids,label_toks,input_lens = self.format_postduce(
+                                                    ex_index,
+                                                    example.guid,
+                                                    input_ids,
+                                                    input_toks,
+                                                    segment_ids,
+                                                    labels_ids,
+                                                    labels_tok,
+                                                    cls_token_at_end,
+                                                    max_seq_length,
+                                                    mask_padding_with_zero,
+                                                    pad_on_left,
+                                                    pad_token,
+                                                    pad_token_segment_id)
                     
 
                 features.append(LabelInputFeatures(input_ids=input_ids, input_mask=input_mask,
-                                            segment_ids=segment_ids, label_ids=labels_ids,input_len=input_lens,input_toks=input_toks,label_toks=labels_tok))
+                                            segment_ids=segment_ids, label_ids=labels_ids,input_len=input_lens,input_toks=input_toks,label_toks=label_toks))
 
     
                 
@@ -234,7 +265,7 @@ class AutoGenDialogueProcessor(AutoGenBaseProcessor):
 
 
 
-class AutoGenQAProcessor(AutoGenBaseProcessor):
+class AutoGenEncoderDecoderQAProcessor(AutoGenBaseProcessor):
 
 
     def __init__(self,args):
@@ -303,45 +334,120 @@ class AutoGenQAProcessor(AutoGenBaseProcessor):
                 segment_ids = [cls_token_segment_id] + (len(quest_str) + 1) * [sequence_a_segment_id]
 
                 
-                input_lens = len(input_ids)
-                input_mask = [1 if mask_padding_with_zero else 0] * input_lens
                 
-
-                if cls_token_at_end:
-                    input_ids = input_ids[1:] + input_ids[:1]
-                    input_toks = input_toks[1:] + input_toks[:1]
-                    segment_ids += segment_ids[1:] + segment_ids[:1]
-                    labels_ids = labels_ids[1:] + labels_ids[:1]
-                    label_toks = label_toks[1:] + label_toks[:1]
-                
-                # Zero-pad up to the sequence length.
-                padding_length = max_seq_length - input_lens
-                if pad_on_left:
-                    input_ids = ([pad_token] * padding_length) + input_ids
-                    labels_ids = ([-100] * (max_seq_length - len(labels_ids))) + labels_ids
-                    input_mask = ([0 if mask_padding_with_zero else 1] * padding_length) + input_mask
-                    segment_ids = ([pad_token_segment_id] * padding_length) + segment_ids
-                    
-                else:
-                    input_ids += [pad_token] * padding_length
-                    labels_ids += ([-100] * (max_seq_length - len(labels_ids))) 
-                    input_mask += [0 if mask_padding_with_zero else 1] * padding_length
-                    segment_ids += [pad_token_segment_id] * padding_length
+                input_ids,input_toks,input_mask,segment_ids,labels_ids,label_toks,input_lens = self.format_postduce(
+                                                    ex_index,
+                                                    example.guid,
+                                                    input_ids,
+                                                    input_toks,
+                                                    segment_ids,
+                                                    labels_ids,
+                                                    label_toks,
+                                                    cls_token_at_end,
+                                                    max_seq_length,
+                                                    mask_padding_with_zero,
+                                                    pad_on_left,
+                                                    pad_token,
+                                                    pad_token_segment_id)
                     
 
-                assert len(input_ids) == max_seq_length
-                assert len(input_mask) == max_seq_length
-                assert len(segment_ids) == max_seq_length
+                features.append(LabelInputFeatures(input_ids=input_ids, input_mask=input_mask,
+                                            segment_ids=segment_ids, label_ids=labels_ids,input_len=input_lens,input_toks=input_toks,label_toks=label_toks))
+
+    
                 
-                if ex_index < 1  and self.args.base.print_data_examples:
-                    logger.info("*** Example ***")
-                    logger.info("guid: %s", example.guid)
-                    logger.info("tokens: %s", " ".join([str(x) for x in input_toks]))
-                    logger.info("input_ids: %s", " ".join([str(x) for x in input_ids]))
-                    logger.info("input_mask: %s", " ".join([str(x) for x in input_mask]))
-                    logger.info("segment_ids: %s", " ".join([str(x) for x in segment_ids]))
-                    logger.info("label_tokens: %s", " ".join([str(x) for x in label_toks]))
-                    logger.info("label_ids: %s", " ".join([str(x) for x in labels_ids]))
+                
+        return features
+
+
+
+
+
+class AutoGenDecoderQAProcessor(AutoGenBaseProcessor):
+
+
+    def __init__(self,args):
+        super().__init__(args)
+        self.args = args
+
+    @classmethod
+    def _read_gen_text(self,input_file):
+        all_lines = io.open(input_file,'r').read()
+        if "\r\n" in all_lines:
+            chapter_data = all_lines.split("\r\n")
+        else:
+            chapter_data = all_lines.split("\n")
+        
+        
+        
+        return chapter_data
+
+    def convert_examples_to_features(self,examples,label_list,max_seq_length,tokenizer,max_utterance_length=64,
+                                 cls_token_at_end=False,cls_token="[CLS]",cls_token_segment_id=1,
+                                 sep_token="[SEP]",pad_on_left=False,pad_token=0,pad_token_segment_id=0,
+                                 sequence_a_segment_id=0,mask_padding_with_zero=True,):
+        """ Loads a data file into a list of `InputBatch`s
+            `cls_token_at_end` define the location of the CLS token:
+                - False (Default, BERT/XLM pattern): [CLS] + A + [SEP] + B + [SEP]
+                - True (XLNet/GPT pattern): A + [SEP] + B + [SEP] + [CLS]
+            `cls_token_segment_id` define the segment id associated to the CLS token (0 for BERT, 2 for XLNet)
+        """
+        sep_id = tokenizer.sep_token_id
+        cls_id = tokenizer.cls_token_id
+        sep_tok = tokenizer.sep_token
+        cls_tok = tokenizer.cls_token
+        features = []
+
+
+
+        for (ex_index, example) in enumerate(examples):
+            if ex_index % 10000 == 0:
+                logger.info("Writing example %d of %d", ex_index, len(examples))
+            
+            chapter = example.chapter
+            if len(chapter) < 3 and '\t' not in chapter :
+                continue
+            splitor_ = chapter.split('\t')
+            question = splitor_[0]
+            answer = splitor_[1][:max_seq_length - 2]
+
+            if '@' in question:
+                questions = [i[:max_utterance_length - 2] for i in question.split('@')]
+            else:
+                questions = [question[:max_utterance_length - 2]]
+
+            
+
+            if self.args.gen_special.muti_question_strategy == 0:
+                questions.sort(key=lambda x:len(x),reverse=True)
+                questions = questions[:1]
+            
+            answer_ids = tokenizer.convert_tokens_to_ids([i for i in answer]) + [sep_id]
+            for quest_str in questions:
+                # GPT的input和label是一样的，只有pad不一样，这一点和T5有区别哦
+                input_ids = [cls_id] + tokenizer.convert_tokens_to_ids([i for i in quest_str]) + [sep_id] + answer_ids + [sep_id]
+                input_toks = [cls_tok] + [i for i in quest_str] + [sep_tok] + [i for i in answer] + [sep_tok]
+                labels_ids = [cls_id] + tokenizer.convert_tokens_to_ids([i for i in quest_str]) + [sep_id] + answer_ids + [sep_id]
+                label_toks = [cls_tok] + [i for i in quest_str] + [sep_tok] + [i for i in answer] + [sep_tok]
+                # quest_str最后还要拼接一个sep，这个也算上
+                segment_ids = [cls_token_segment_id] + (len(input_ids)-1)  * [sequence_a_segment_id]
+
+                
+                
+                input_ids,input_toks,input_mask,segment_ids,labels_ids,label_toks,input_lens = self.format_postduce(
+                                                    ex_index,
+                                                    example.guid,
+                                                    input_ids,
+                                                    input_toks,
+                                                    segment_ids,
+                                                    labels_ids,
+                                                    label_toks,
+                                                    cls_token_at_end,
+                                                    max_seq_length + max_utterance_length, # 因为GPT是拼接起来的，所以总长度是相加
+                                                    mask_padding_with_zero,
+                                                    pad_on_left,
+                                                    pad_token,
+                                                    pad_token_segment_id)
                     
 
                 features.append(LabelInputFeatures(input_ids=input_ids, input_mask=input_mask,

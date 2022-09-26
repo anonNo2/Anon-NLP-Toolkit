@@ -10,7 +10,7 @@ from tqdm import tqdm
 
 
 
-class T5GenScore(object):
+class GenScore(object):
     def __init__(self, context_dict):
         self.context_dict = context_dict
         self.context = context_dict.context
@@ -69,10 +69,57 @@ class T5GenScore(object):
     
 
 
+class GPTQAGenScore(GenScore):
+    def __init__(self, context_dict):
+        super().__init__(context_dict)
+        self.context_dict = context_dict
+        self.context = context_dict.context
+        self.logger = self.context.logger
+        self.correct_nums = 0
+        self.all_nums = 0
+        self.reset()
+    
+
+    def generate_text_by_input(self,text,history_text,model,tokenizer):
+        
+        history_text.append(text)
+        temp_choosen_h_mark = []
+
+        history = [tokenizer.encode(i, add_special_tokens=False) for i in history_text]
+
+
+        input_ids = [tokenizer.cls_token_id]  # 每个input以[CLS]为开头
+        history_start_index = 1
+        filter_history_sent_ids = []
+        for rev_idx in range(len(history)-1,-1,-1):
+            
+            this_turn_ids = history[rev_idx][:self.context_dict.base.eval_max_utterance_len] + [tokenizer.sep_token_id]
+            
+            if history_start_index + len(this_turn_ids)  > self.context_dict.base.eval_max_seq_len:
+                break
+            
+            filter_history_sent_ids.append(this_turn_ids)
+            history_start_index += len(this_turn_ids)
+        filter_history_sent_ids.reverse()
+
+        for sent_ids in filter_history_sent_ids:
+            input_ids.extend(sent_ids)
+            temp_choosen_h_mark.append(tokenizer.convert_ids_to_tokens(sent_ids))
+            
+            
+
+        input_ids = torch.tensor(input_ids).long().to(model.device)
+        input_ids = input_ids.unsqueeze(0)
+
+        # 最多生成max_len个token
+        output = model.generate(input_ids,decoder_start_token_id=tokenizer.cls_token_id,eos_token_id=tokenizer.sep_token_id,top_k=1,max_length=self.context_dict.base.eval_max_utterance_len).cpu().numpy()[0]
+        
+        text = ''.join([i for i in tokenizer.decode(output[1:-1])]).replace(' ', '')
+        return text
 
 
 
-class T5AQGenScore(T5GenScore):
+class T5QAGenScore(GenScore):
     def __init__(self, context_dict):
         super().__init__(context_dict)
         self.context_dict = context_dict
@@ -155,7 +202,7 @@ class T5AQGenScore(T5GenScore):
 
 
 
-class T5DialogueGenScore(T5GenScore):
+class T5DialogueGenScore(GenScore):
     def __init__(self, context_dict):
         super().__init__(context_dict)
         self.context_dict = context_dict

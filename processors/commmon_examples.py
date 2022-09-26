@@ -10,7 +10,7 @@ import copy
 
 
 
-class GenDialogueInputExample(object):
+class GenInputExample(object):
     """A single training/test example for token classification."""
     def __init__(self, guid, chapter):
         """Constructs a InputExample.

@@ -2,16 +2,16 @@
 language: zh
 # task type(ner,cls,generate)
 type: GEN
-model: T5-Pegasus
-struct: T5-ConditionalGeneration-QA
+model: GPT
+struct: GPT-ConditionalGeneration-QA
 # required params (常规必备参数)
 base: 
-  task_name: gen_test_QA_T5
+  task_name: gen_test_QA_GPT
   data_dir: /data/anon/anon-nlp-toolkit/datasets/gen_QA/medical_QA
-  model_name_or_path: /data/anon/pretrain_model/t5_pegasus_torch
+  model_name_or_path: /data/anon/pretrain_model/CDial-GPT_LCCC-base
   output_dir: /data/anon/output_dir
   cache_dir: /data/anon/cache_dir
-  # 在此作为QA-答案的最大长度
+    # 在此作为QA-答案的最大长度
   train_max_seq_len: 512
   eval_max_seq_len: 512
   # 在此作为QA-问题的最大长度
@@ -20,7 +20,6 @@ base:
   do_train: true
   do_eval: true
   do_predict: false
-  need_init_model_evaluate: true
   evaluate_during_training: true
   do_lower_case: true
   per_gpu_train_batch_size: 8
