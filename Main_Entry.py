@@ -31,7 +31,7 @@ from executive_devices.ner_devices import BertBilstmCrfNerExecDevice,BertCrfNerE
 from models.bert_for_cls import BertForNormalCls
 from processors.cls_seq import AutoClsProcessor
 from models.bert_for_ner import BertBiLSTMCrfForNer, BertCrfForNer, BertSoftmaxForNer, BertSpanForNer
-from processors.gen_seq import AutoGenDialogueProcessor, AutoGenQAProcessor
+from processors.gen_seq import AutoGenEncoderDecoderDialogueProcessor, AutoGenEncoderDecoderQAProcessor
 from processors.ner_seq import AutoNerProcessor
 from processors.ner_span import AutoSpanProcessor
 from tools.common import seed_everything,json_to_text
@@ -57,8 +57,8 @@ Main_Struct_Dict = {
     },
     'GEN':{
         'T5-Pegasus': {
-            'T5-ConditionalGeneration-Dialogue':(MT5Config, MT5ForConditionalGeneration, T5PegasusTokenizer,AutoGenDialogueProcessor,T5PegasusExecDevice),
-            'T5-ConditionalGeneration-QA':(MT5Config, MT5ForConditionalGeneration, T5PegasusTokenizer,AutoGenQAProcessor,T5QAExecDevice)
+            'T5-ConditionalGeneration-Dialogue':(MT5Config, MT5ForConditionalGeneration, T5PegasusTokenizer,AutoGenEncoderDecoderDialogueProcessor,T5PegasusExecDevice),
+            'T5-ConditionalGeneration-QA':(MT5Config, MT5ForConditionalGeneration, T5PegasusTokenizer,AutoGenEncoderDecoderQAProcessor,T5QAExecDevice)
         }
     }
 }

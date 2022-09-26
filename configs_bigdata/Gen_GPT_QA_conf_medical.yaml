@@ -2,23 +2,24 @@
 language: zh
 # task type(ner,cls,generate)
 type: GEN
-model: T5-Pegasus
-struct: T5-ConditionalGeneration-QA
+model: GPT
+struct: GPT-ConditionalGeneration-QA
 # required params (常规必备参数)
 base: 
-  task_name: gen_test_QA_T5
-  data_dir: /data/anon/anon-nlp-toolkit/datasets/gen_QA/medical_QA
-  model_name_or_path: /data/anon/pretrain_model/t5_pegasus_torch
+  task_name: gen_test_QA_GPT
+  data_dir: /data1/anon/Anon-NLP-Toolkit/datasets/gen_QA/medical_QA_simplify_test
+  model_name_or_path: /data1/PRETRAIN_MODEL/gpt2-chinese-cluecorpussmall
   output_dir: /data/anon/output_dir
   cache_dir: /data/anon/cache_dir
-  # 在此作为QA-答案的最大长度
+  print_data_examples: true
+    # 在此作为QA-答案的最大长度
   train_max_seq_len: 512
   eval_max_seq_len: 512
   # 在此作为QA-问题的最大长度
   train_max_utterance_len: 256
   eval_max_utterance_len: 256
   do_train: true
-  do_eval: true
+  do_eval: false
   do_predict: false
   evaluate_during_training: true
   do_lower_case: true
@@ -29,12 +30,12 @@ base:
   weight_decay: 0.01
   adam_epsilon: 0.00000001
   max_grad_norm: 1.0
-  num_train_epochs: 2
+  num_train_epochs: 1
   max_steps: -1
   warmup_proportion: 0.1
-  logging_steps: 132500
-  save_steps: 265000
-  eval_all_checkpoints: true
+  logging_steps: -1
+  save_steps: 13250
+  eval_all_checkpoints: false
   predict_checkpoints: 40
   no_cuda: false
   overwrite_output_dir: true
@@ -46,6 +47,10 @@ base:
   server_ip:
   server_port:
 
+big_data:
+  need_split_shard: true
+  shard_size: 100
+  shuffle_before_split: true
 
 
 # (adversarial training params) 对抗训练参数

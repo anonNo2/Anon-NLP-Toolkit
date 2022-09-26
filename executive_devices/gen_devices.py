@@ -11,7 +11,7 @@ from callback.optimizater.adamw import AdamW
 import os,json,io
 import numpy as np
 from metrics.cls_metrics import SeqClsScore
-from metrics.gen_metrics import T5AQGenScore, T5DialogueGenScore
+from metrics.gen_metrics import GPTQAGenScore, T5QAGenScore, T5DialogueGenScore
 from metrics.ner_metrics import SeqEntityScore, SpanEntityScore
 from processors.ner_common_processors import entity_tag_extractor
 
@@ -226,16 +226,46 @@ class T5GenExecDevice(GenExecDevice):
         return optimizer_grouped_parameters
 
 
+
+class GPTGenExecDevice(GenExecDevice):
+
+    
+    def get_eval_tags(self,model,logits,inputs):
+        return
+
+    def get_optimizer_grouped_parameters(self,context_config):
+        args = context_config.base
+        context = context_config.context
+        model = context.model
+
+        # Prepare optimizer and schedule (linear warmup and decay)
+        no_decay = ["ln_1.weight","ln_2.weight"]
+        optimizer_grouped_parameters = [
+            {"params": [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
+            "weight_decay": args.weight_decay,},
+            {"params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)], "weight_decay": 0.0},
+        ]
+        return optimizer_grouped_parameters
+
+
 class T5PegasusExecDevice(T5GenExecDevice):
 
     def get_metrics(self,context_config):
         return T5DialogueGenScore(context_config)
     
 
-class T5QAExecDevice(T5GenExecDevice):
+class T5QAExecDevice(GPTGenExecDevice):
 
     def get_metrics(self,context_config):
-        return T5AQGenScore(context_config)
+        return T5QAGenScore(context_config)
+    
+
+
+
+class GPTQAExecDevice(GPTGenExecDevice):
+
+    def get_metrics(self,context_config):
+        return GPTQAGenScore(context_config)
     
 
 
