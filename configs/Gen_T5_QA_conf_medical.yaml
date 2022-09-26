@@ -18,6 +18,7 @@ base:
   do_train: true
   do_eval: true
   do_predict: false
+  need_init_model_evaluate: true
   evaluate_during_training: true
   do_lower_case: true
   per_gpu_train_batch_size: 8

@@ -72,6 +72,17 @@ class GenExecDevice(ExecutiveDevice):
         
         return results
 
+
+    def save_gen_metrics_files(self,context_config,model,data_type):
+        metric_score = self.get_metrics(context_config)
+        self.eval_preparatory(context_config)
+        # Save model checkpoint
+        output_dir = os.path.join(context_config.context.output_dir,"checkpoint_dir" ,"checkpoint-{}".format(context_config.context.global_step))
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+        gen_data_file_path = metric_score.get_machine_metric_datas(model,output_dir,data_type)
+        metric_score.calculate_machine_metrics(gen_data_file_path,output_dir,data_type)
+
     def predict_step(self,context_config,prefix=""):
 
         args = context_config.base
@@ -93,6 +104,10 @@ class GenExecDevice(ExecutiveDevice):
         args = context_config.base
         context = context_config.context
         model = context.model
+
+
+        if args.need_init_model_evaluate and context.global_step == 0 and context_config.gen_special.text_eval_before_save:
+            self.save_gen_metrics_files(context_config,model,'eval')
         
         optimizer = context.optimizer
         scheduler = context.scheduler
@@ -121,14 +136,7 @@ class GenExecDevice(ExecutiveDevice):
                         self.eval_step(context_config,args.task_name)
                 if args.local_rank in [-1, 0] and args.save_steps > 0 and context.global_step % args.save_steps == 0:
                     if context_config.gen_special.text_eval_before_save:
-                        metric_score = self.get_metrics(context_config)
-                        self.eval_preparatory(context_config)
-                        # Save model checkpoint
-                        output_dir = os.path.join(context.output_dir,"checkpoint_dir" ,"checkpoint-{}".format(context.global_step))
-                        if not os.path.exists(output_dir):
-                            os.makedirs(output_dir)
-                        gen_data_file_path = metric_score.get_machine_metric_datas(model,output_dir,'eval')
-                        metric_score.calculate_machine_metrics(gen_data_file_path,output_dir,'eval')
+                        self.save_gen_metrics_files(context_config,model,'eval')
                         
                     self.save_ckpt(context_config,model)
 

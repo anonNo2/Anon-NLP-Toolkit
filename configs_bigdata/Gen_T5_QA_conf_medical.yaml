@@ -11,14 +11,19 @@ base:
   model_name_or_path: /data/anon/pretrain_model/t5_pegasus_torch
   output_dir: /data/anon/output_dir
   cache_dir: /data/anon/cache_dir
+  # 是否输出数据例子
   print_data_examples: false
+  # 在QA中作为答案最大长度
   train_max_seq_len: 512
   eval_max_seq_len: 512
+  # 在QA中作为问题最大长度
   train_max_utterance_len: 256
   eval_max_utterance_len: 256
   do_train: true
   do_eval: false
   do_predict: false
+  # 是否需要对初始状态的模型进行评估
+  need_init_model_evaluate: true
   evaluate_during_training: true
   do_lower_case: true
   per_gpu_train_batch_size: 8
@@ -44,10 +49,13 @@ base:
   local_rank: -1
   server_ip:
   server_port:
-
+# 过大数据集分片训练设置
 big_data:
+  # 训练数据集是否需要分片
   need_split_shard: true
+  # 训练数据集的分片大小
   shard_size: 100000
+  # 分片前是否需要shuffle
   shuffle_before_split: true
 
 
