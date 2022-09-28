@@ -77,7 +77,50 @@ class GPTQAGenScore(GenScore):
         self.logger = self.context.logger
         self.correct_nums = 0
         self.all_nums = 0
+        self.gen_max_len =  self.context_dict.base.eval_max_seq_len
         self.reset()
+
+
+    
+
+    
+    def get_machine_metric_datas(self,model,output_dir,data_type):
+        '''
+        生成机器指标（bleu,gleu,rouge）所需的数据
+        
+        '''
+        model_to_gen = (
+            model.module if hasattr(model, "module") else model
+        )  # Take care of distributed/parallel training
+        tokenizer = self.context.tokenizer
+        
+        model_to_gen.eval()
+        data_loader = self.context[f'{data_type}_dataloader']
+        results = []
+        pbar = ProgressBar(n_total=len(data_loader), desc=f"Evaluating Machine Metrics-ckpt:{self.context.global_step}")
+        
+        for step, batch in enumerate(data_loader):
+            
+            batch = tuple(t.to(self.context.device) for t in batch)
+            input_ids = batch[5]
+
+            
+            
+            output = model_to_gen.generate(input_ids,decoder_start_token_id=tokenizer.cls_token_id,
+                                                eos_token_id=tokenizer.sep_token_id,
+                                                pad_token_id=tokenizer.pad_token_id,
+                                                top_k=1,
+                                                max_new_tokens=self.gen_max_len).cpu().numpy()
+            gen_texts = [tokenizer.decode(j for j in i[1:-1] if j not in [tokenizer.cls_token_id,tokenizer.sep_token_id,tokenizer.pad_token_id,tokenizer.unk_token_id]).replace(' ','') for i in output]
+            answers_texts = [tokenizer.decode(j for j in i[1:-1] if j not in [tokenizer.cls_token_id,tokenizer.sep_token_id,tokenizer.pad_token_id,tokenizer.unk_token_id,-100]).replace(' ','') for i in batch[6]]
+            for idx in range(len(gen_texts)):
+                results.append({'ori':answers_texts[idx],'gen':gen_texts[idx]})
+            pbar(step)
+                
+        
+        data_file_path = os.path.join(output_dir,f'{data_type}_machine_metric_data.json')
+        io.open(data_file_path,'w').write(json.dumps(results,ensure_ascii=False, indent=4))
+        return data_file_path
     
 
     def generate_text_by_input(self,text,history_text,model,tokenizer):
@@ -112,7 +155,7 @@ class GPTQAGenScore(GenScore):
         input_ids = input_ids.unsqueeze(0)
 
         # 最多生成max_len个token
-        output = model.generate(input_ids,decoder_start_token_id=tokenizer.cls_token_id,eos_token_id=tokenizer.sep_token_id,top_k=1,max_length=self.context_dict.base.eval_max_utterance_len).cpu().numpy()[0]
+        output = model.generate(input_ids,decoder_start_token_id=tokenizer.cls_token_id,eos_token_id=tokenizer.sep_token_id,top_k=1,max_new_tokens=self.gen_max_len).cpu().numpy()[0]
         
         text = ''.join([i for i in tokenizer.decode(output[1:-1])]).replace(' ', '')
         return text
@@ -127,6 +170,7 @@ class T5QAGenScore(GenScore):
         self.logger = self.context.logger
         self.correct_nums = 0
         self.all_nums = 0
+        self.gen_max_len =  self.context_dict.base.eval_max_seq_len
         self.reset()
     
 
@@ -162,7 +206,7 @@ class T5QAGenScore(GenScore):
         input_ids = input_ids.unsqueeze(0)
 
         # 最多生成max_len个token
-        output = model.generate(input_ids,decoder_start_token_id=tokenizer.cls_token_id,eos_token_id=tokenizer.sep_token_id,top_k=1,max_length=self.context_dict.base.eval_max_utterance_len).cpu().numpy()[0]
+        output = model.generate(input_ids,decoder_start_token_id=tokenizer.cls_token_id,eos_token_id=tokenizer.sep_token_id,top_k=1,max_new_tokens=self.gen_max_len).cpu().numpy()[0]
         
         text = ''.join([i for i in tokenizer.decode(output[1:-1])]).replace(' ', '')
         return text
@@ -187,7 +231,7 @@ class T5QAGenScore(GenScore):
             
             batch = tuple(t.to(self.context.device) for t in batch)
             input_ids = batch[0]
-            output = model.generate(input_ids,decoder_start_token_id=tokenizer.cls_token_id,eos_token_id=tokenizer.sep_token_id,top_k=1,max_length=self.context_dict.base.eval_max_utterance_len).cpu().numpy()
+            output = model.generate(input_ids,decoder_start_token_id=tokenizer.cls_token_id,eos_token_id=tokenizer.sep_token_id,top_k=1,max_new_tokens=self.gen_max_len).cpu().numpy()
             gen_texts = [tokenizer.decode(j for j in i[1:-1] if j not in [tokenizer.cls_token_id,tokenizer.sep_token_id,tokenizer.pad_token_id,tokenizer.unk_token_id]).replace(' ','') for i in output]
             answers_texts = [tokenizer.decode(j for j in i[1:-1] if j not in [tokenizer.cls_token_id,tokenizer.sep_token_id,tokenizer.pad_token_id,tokenizer.unk_token_id,-100]).replace(' ','') for i in batch[3]]
             for idx in range(len(gen_texts)):
@@ -210,6 +254,7 @@ class T5DialogueGenScore(GenScore):
         self.logger = self.context.logger
         self.correct_nums = 0
         self.all_nums = 0
+        self.gen_max_len =  self.context_dict.base.eval_max_utterance_len
         self.reset()
 
 
@@ -246,7 +291,7 @@ class T5DialogueGenScore(GenScore):
         input_ids = input_ids.unsqueeze(0)
 
         # 最多生成max_len个token
-        output = model.generate(input_ids,decoder_start_token_id=tokenizer.cls_token_id,eos_token_id=tokenizer.sep_token_id,top_k=1,max_length=self.context_dict.base.eval_max_utterance_len).cpu().numpy()[0]
+        output = model.generate(input_ids,decoder_start_token_id=tokenizer.cls_token_id,eos_token_id=tokenizer.sep_token_id,top_k=1,max_new_tokens=self.gen_max_len).cpu().numpy()[0]
         
         text = ''.join(tokenizer.decode(output[1:-1])).replace(' ', '')
         return text

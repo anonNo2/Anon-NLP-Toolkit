@@ -1,4 +1,5 @@
 """ Named entity recognition fine-tuning: utilities to work with CLUENER task. """
+
 import torch
 import logging
 import os,io
@@ -382,6 +383,36 @@ class AutoGenDecoderQAProcessor(AutoGenBaseProcessor):
         
         return chapter_data
 
+    
+    def train_collate_fn(self,batch):
+        """
+        batch should be a list of (sequence, target, length) tuples...
+        Returns a padded tensor of sequences sorted from longest to shortest,
+        """
+        all_input_ids, all_attention_mask, all_token_type_ids, all_lens, all_labels,eval_input,eval_label = map(torch.stack, zip(*batch))
+        max_len = max(all_lens).item()
+        all_input_ids = all_input_ids[:, :max_len]
+        all_attention_mask = all_attention_mask[:, :max_len]
+        all_token_type_ids = all_token_type_ids[:, :max_len]
+        all_labels = all_labels[:, :max_len]
+        return all_input_ids, all_attention_mask, all_token_type_ids, all_labels,all_lens,eval_input,eval_label
+
+
+    def reduce_to_tensorDataset(self,features,data_type):
+
+        all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
+        all_input_mask = torch.tensor([f.input_mask for f in features], dtype=torch.long)
+        all_segment_ids = torch.tensor([f.segment_ids for f in features], dtype=torch.long)
+        all_label_ids = torch.tensor([f.label_ids for f in features], dtype=torch.long)
+        all_lens = torch.tensor([f.input_len for f in features], dtype=torch.long)
+
+        eval_input_ids = torch.tensor([f.eval_input_ids for f in features], dtype=torch.long)
+        eval_label_ids = torch.tensor([f.eval_label_ids for f in features], dtype=torch.long)
+        
+        dataset = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_lens, all_label_ids,eval_input_ids,eval_label_ids)
+        return dataset
+
+
     def convert_examples_to_features(self,examples,label_list,max_seq_length,tokenizer,max_utterance_length=64,
                                  cls_token_at_end=False,cls_token="[CLS]",cls_token_segment_id=1,
                                  sep_token="[SEP]",pad_on_left=False,pad_token=0,pad_token_segment_id=0,
@@ -422,7 +453,7 @@ class AutoGenDecoderQAProcessor(AutoGenBaseProcessor):
                 questions.sort(key=lambda x:len(x),reverse=True)
                 questions = questions[:1]
             
-            answer_ids = tokenizer.convert_tokens_to_ids([i for i in answer]) + [sep_id]
+            answer_ids = tokenizer.convert_tokens_to_ids([i for i in answer]) 
             for quest_str in questions:
                 # GPT的input和label是一样的，只有pad不一样，这一点和T5有区别哦
                 input_ids = [cls_id] + tokenizer.convert_tokens_to_ids([i for i in quest_str]) + [sep_id] + answer_ids + [sep_id]
@@ -431,6 +462,8 @@ class AutoGenDecoderQAProcessor(AutoGenBaseProcessor):
                 label_toks = [cls_tok] + [i for i in quest_str] + [sep_tok] + [i for i in answer] + [sep_tok]
                 # quest_str最后还要拼接一个sep，这个也算上
                 segment_ids = [cls_token_segment_id] + (len(input_ids)-1)  * [sequence_a_segment_id]
+                eval_input_ids = [cls_id] + tokenizer.convert_tokens_to_ids([i for i in quest_str]) + [sep_id]
+                eval_label_ids = [cls_id] + answer_ids + [sep_id]
 
                 
                 
@@ -448,10 +481,32 @@ class AutoGenDecoderQAProcessor(AutoGenBaseProcessor):
                                                     pad_on_left,
                                                     pad_token,
                                                     pad_token_segment_id)
+
+            
+
+                input_lens = len(eval_input_ids)
+                
+                if cls_token_at_end:
+                    eval_input_ids = eval_input_ids[1:] + eval_input_ids[:1]
+                    eval_label_ids = eval_label_ids[1:] + eval_label_ids[:1]
+                    
+                
+                # Zero-pad up to the sequence length.
+                padding_length = max_seq_length - input_lens
+                if pad_on_left:
+                    eval_input_ids = ([pad_token] * padding_length) + eval_input_ids
+                    eval_label_ids = ([-100] * (max_seq_length - len(eval_label_ids))) + eval_label_ids
+                    
+                    
+                else:
+                    eval_input_ids += [pad_token] * padding_length
+                    eval_label_ids += ([-100] * (max_seq_length - len(eval_label_ids))) 
+                    
                     
 
                 features.append(LabelInputFeatures(input_ids=input_ids, input_mask=input_mask,
-                                            segment_ids=segment_ids, label_ids=labels_ids,input_len=input_lens,input_toks=input_toks,label_toks=label_toks))
+                                            segment_ids=segment_ids, label_ids=labels_ids,input_len=input_lens,input_toks=input_toks,
+                                            label_toks=label_toks,eval_input_ids=eval_input_ids,eval_label_ids=eval_label_ids))
 
     
                 

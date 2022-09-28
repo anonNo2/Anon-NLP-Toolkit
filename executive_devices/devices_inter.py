@@ -115,7 +115,7 @@ class ExecutiveDevice():
         
         steps_trained_in_current_epoch = 0
         
-        if args.continue_train and global_step == 0:
+        if args.continue_train and global_step == 0 and context.get('continue_step'):
             context.global_step = context.continue_step
         else:
             context.global_step = global_step

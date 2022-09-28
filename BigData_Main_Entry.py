@@ -251,7 +251,7 @@ class MainController():
         model_path = args.base.model_name_or_path
 
         if args.base.continue_train:
-            logger.info('注意：满足继续训练条件，将开启继续训练模式')
+            
             last_output_dir = context.output_dir
             ckpt_dir = os.path.join(last_output_dir,'checkpoint_dir')
             shard_dir = os.path.join(last_output_dir,'shard_model_dir')
@@ -272,8 +272,11 @@ class MainController():
                         load_dir = os.path.join(shard_dir,dir)
             
             
-            model_path = load_dir
-            context.continue_step = max_global_step
+            if load_dir:
+                logger.info('注意：满足继续训练条件，将开启继续训练模式')
+                model_path = load_dir
+                context.continue_step = max_global_step
+                self.logger.info(f" 加载模型将更为为:{load_dir}")
 
             
 
@@ -468,4 +471,4 @@ class MainController():
 
 
 if __name__ == "__main__":
-    MainController('/data/anon/anon-nlp-toolkit/configs_bigdata/Gen_T5_QA_conf_medical_v3.yaml')()
+    MainController('/data1/anon/Anon-NLP-Toolkit/configs_bigdata/Gen_GPT_QA_conf_medical_v2.yaml')()

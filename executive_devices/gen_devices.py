@@ -140,7 +140,7 @@ class GenExecDevice(ExecutiveDevice):
                         
                         self.save_gen_metrics_files(context_config,model,'eval')
                         # print(model.state_dict()['encoder.embed_tokens.weight'][0][0:100])
-                        print(model.state_dict()['encoder.embed_tokens.weight'][0][0:100].cpu().numpy().tolist())
+                        # print(model.state_dict()['encoder.embed_tokens.weight'][0][0:100].cpu().numpy().tolist())
                         
                     self.save_ckpt(context_config,model)
 
