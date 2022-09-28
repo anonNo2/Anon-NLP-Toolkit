@@ -1,3 +1,4 @@
+from asyncio.log import logger
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
 from torch.utils.data.distributed import DistributedSampler
 import torch
@@ -35,7 +36,7 @@ class ExecutiveDevice():
         context.eval_dataloader = DataLoader(context.eval_dataset, sampler=context.eval_sampler, batch_size=context.eval_batch_size,
                                     collate_fn=context.processor.dev_collate_fn)
 
-    def train_preparatory(self,context_config,optimizer_grouped_parameters,global_step=0):
+    def train_preparatory(self,context_config,optimizer_grouped_parameters,global_step=0,init_shard=False):
         '''
         训练前的公共准备部分
         '''
@@ -55,16 +56,35 @@ class ExecutiveDevice():
             context.t_total = len(context.train_dataloader) // args.gradient_accumulation_steps * args.num_train_epochs
 
 
-        context.warmup_steps = int(context.t_total * args.warmup_proportion)
-        context.optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
-        context.scheduler = get_linear_schedule_with_warmup(context.optimizer, num_warmup_steps=context.warmup_steps,
-                                                    num_training_steps=context.t_total)
+        if context_config.big_data.need_split_shard:
+        # if False:
+            # 分片初始
+            if init_shard:
+                shard_warmup_steps = int(context_config.big_data.big_data_total_step * args.warmup_proportion)
+                context.optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
+                context.scheduler = get_linear_schedule_with_warmup(context.optimizer, num_warmup_steps=shard_warmup_steps,
+                                                            num_training_steps=context_config.big_data.big_data_total_step)
+                logger.info(f'分片训练初始化优化器，预热步数:{shard_warmup_steps},总步数:{context_config.big_data.big_data_total_step}')
+            else:
+                logger.info(f'当前步数:{global_step},不重新初始化优化器')
+
+        else:
+            # 非分片初始
+            
+            context.warmup_steps = int(context.t_total * args.warmup_proportion)
+            context.optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
+            context.scheduler = get_linear_schedule_with_warmup(context.optimizer, num_warmup_steps=context.warmup_steps,
+                                                        num_training_steps=context.t_total)
+            logger.info(f'常规初始化优化器，预热步数:{context.warmup_steps},总步数:{context.t_total}')
+
         # Check if saved optimizer or scheduler states exist
         if os.path.isfile(os.path.join(args.model_name_or_path, "optimizer.pt")) and os.path.isfile(
                 os.path.join(args.model_name_or_path, "scheduler.pt")):
             # Load in optimizer and scheduler states
             context.optimizer.load_state_dict(torch.load(os.path.join(args.model_name_or_path, "optimizer.pt")))
             context.scheduler.load_state_dict(torch.load(os.path.join(args.model_name_or_path, "scheduler.pt")))
+            
+
         if args.fp16:
             try:
                 from apex import amp
@@ -94,7 +114,13 @@ class ExecutiveDevice():
 
         
         steps_trained_in_current_epoch = 0
-        context.global_step = global_step
+        
+        if args.continue_train and global_step == 0:
+            context.global_step = context.continue_step
+        else:
+            context.global_step = global_step
+        
+
         context.steps_trained_in_current_epoch = steps_trained_in_current_epoch
         # Check if continuing training from a checkpoint
         if os.path.exists(args.model_name_or_path) and "checkpoint" in args.model_name_or_path:
@@ -130,9 +156,16 @@ class ExecutiveDevice():
         '''
         args = context_config.base
         context = context_config.context
-        model = context.model
+
+        logger = context.logger
+
+        global_step = context.get('global_step',0)
+        init_shard = global_step == 0
         
-        self.train_preparatory(context_config,self.get_optimizer_grouped_parameters(context_config),global_step=context.get('global_step',0))
+        self.train_preparatory(context_config,self.get_optimizer_grouped_parameters(context_config),global_step=global_step,init_shard=init_shard)
+
+
+        model = context.model
         
         context.tr_loss, context.logging_loss = 0.0, 0.0
         if context_config.adversarial.do_adv:
@@ -183,16 +216,13 @@ class ExecutiveDevice():
         context = context_config.context
         logger = context.logger
         # Save model checkpoint
-        output_dir = os.path.join(context.output_dir, "checkpoint-{}".format(context.global_step))
+        output_dir = os.path.join(context_config.context.output_dir,"checkpoint_dir" ,"checkpoint-{}".format(context_config.context.global_step))
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
         model_to_save = (
             model.module if hasattr(model, "module") else model
         )  # Take care of distributed/parallel training
         model_to_save.save_pretrained(output_dir)
-
-
-
 
         logger.info(f"Saving model checkpoint to {output_dir}")
         context.tokenizer.save_vocabulary(output_dir)

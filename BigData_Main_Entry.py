@@ -181,15 +181,20 @@ class MainController():
         self.logger.print_config(self.config)
         args.context.logger = self.logger
         copyfile(self.conf_path,self.config.context.output_dir + f'/train_config.yml')
+
+
+
         if os.path.exists(args.context.output_dir) and os.listdir(
                 args.context.output_dir) and args.base.do_train and not args.base.overwrite_output_dir:
-            raise ValueError(
-                self.logger.glo(
-                "输出目录({})已经存在了，你可以在配置中使用overwrite_output_dir=true来进行覆盖",
-                "Output directory ({}) already exists and is not empty. Use overwrite_output_dir = true to overcome.")
-                .format(
-                    args.context.output_dir
-                    ))
+            
+            if not args.base.need_init_model_evaluate:
+                raise ValueError(
+                    self.logger.glo(
+                    "输出目录({})已经存在了，你可以在配置中使用overwrite_output_dir=true来进行覆盖",
+                    "Output directory ({}) already exists and is not empty. Use overwrite_output_dir = true to overcome.")
+                    .format(
+                        args.context.output_dir
+                        ))
         # 如果需要，设置远程调试
         # Setup distant debugging if needed
         if args.base.server_ip and args.base.server_port:
@@ -230,6 +235,8 @@ class MainController():
 
     def load_model(self):
         args = self.config
+        context = self.config.context
+        logger = self.logger
         # 在分布式训练时，保证只有主进程加载预训练语言模型和词表
         # Make sure only the first process in distributed training will download model & vocab
         if args.base.local_rank not in [-1, 0]:
@@ -240,7 +247,39 @@ class MainController():
         
         args.context.tokenizer = tokenizer_class.from_pretrained(args.base.model_name_or_path,
                                                     do_lower_case=args.base.do_lower_case,)
-        args.context.model = model_class.from_pretrained(args.base.model_name_or_path, config= args.context.config)
+
+        model_path = args.base.model_name_or_path
+
+        if args.base.continue_train:
+            logger.info('注意：满足继续训练条件，将开启继续训练模式')
+            last_output_dir = context.output_dir
+            ckpt_dir = os.path.join(last_output_dir,'checkpoint_dir')
+            shard_dir = os.path.join(last_output_dir,'shard_model_dir')
+            max_global_step = 0
+            load_dir = ''
+            for _, dirs, _ in os.walk(ckpt_dir):
+                for dir in dirs:
+                    ckpt_step = int(dir.replace('checkpoint-',''))
+                    if ckpt_step > max_global_step:
+                        max_global_step = ckpt_step
+                        load_dir = os.path.join(ckpt_dir,dir)
+            
+            for _, dirs, _ in os.walk(shard_dir):
+                for dir in dirs:
+                    shard_step = int(dir.split('-step#')[1].replace('#',''))
+                    if shard_step > max_global_step:
+                        max_global_step = shard_step
+                        load_dir = os.path.join(shard_dir,dir)
+            
+            
+            model_path = load_dir
+            context.continue_step = max_global_step
+
+            
+
+        
+        args.context.model = model_class.from_pretrained(model_path, config= args.context.config)
+        args.context.model_class = model_class
         args.context.exe_device = exe_device_class()
         
         # 在分布式训练时，保证只有主进程加载预训练语言模型和词表
@@ -429,4 +468,4 @@ class MainController():
 
 
 if __name__ == "__main__":
-    MainController('/data1/anon/Anon-NLP-Toolkit/configs_bigdata/Gen_GPT_QA_conf_medical.yaml')()
+    MainController('/data/anon/anon-nlp-toolkit/configs_bigdata/Gen_T5_QA_conf_medical_v3.yaml')()

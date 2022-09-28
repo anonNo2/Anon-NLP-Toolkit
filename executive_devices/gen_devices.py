@@ -74,6 +74,7 @@ class GenExecDevice(ExecutiveDevice):
 
 
     def save_gen_metrics_files(self,context_config,model,data_type):
+        model.eval()
         metric_score = self.get_metrics(context_config)
         self.eval_preparatory(context_config)
         # Save model checkpoint
@@ -136,7 +137,10 @@ class GenExecDevice(ExecutiveDevice):
                         self.eval_step(context_config,args.task_name)
                 if args.local_rank in [-1, 0] and args.save_steps > 0 and context.global_step % args.save_steps == 0:
                     if context_config.gen_special.text_eval_before_save:
+                        
                         self.save_gen_metrics_files(context_config,model,'eval')
+                        # print(model.state_dict()['encoder.embed_tokens.weight'][0][0:100])
+                        print(model.state_dict()['encoder.embed_tokens.weight'][0][0:100].cpu().numpy().tolist())
                         
                     self.save_ckpt(context_config,model)
 
@@ -224,8 +228,9 @@ class T5GenExecDevice(GenExecDevice):
         context = context_config.context
         model = context.model
 
-        # Prepare optimizer and schedule (linear warmup and decay)
-        no_decay = ["layer_norm.weight"]
+        
+        # no_decay = ["layer_norm.weight"]
+        no_decay = []
         optimizer_grouped_parameters = [
             {"params": [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
             "weight_decay": args.weight_decay,},

@@ -111,3 +111,4 @@ datasets
 data_reducer
 *.logs
 temp_test
+*.out
