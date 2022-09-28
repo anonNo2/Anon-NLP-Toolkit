@@ -471,4 +471,4 @@ class MainController():
 
 
 if __name__ == "__main__":
-    MainController('/data1/anon/Anon-NLP-Toolkit/configs_bigdata/Gen_GPT_QA_conf_medical_v2.yaml')()
+    MainController('/data1/anon/Anon-NLP-Toolkit/configs_bigdata/Gen_GPT_QA_conf_medical_v3.yaml')()

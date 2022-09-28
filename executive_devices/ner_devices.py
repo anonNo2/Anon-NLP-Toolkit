@@ -2,6 +2,7 @@
 
 from pickletools import optimize
 from callback import optimizater
+from callback.balance_dataparallel import BalancedDataParallel
 from callback.progressbar import ProgressBar
 from executive_devices.devices_inter import ExecutiveDevice
 import torch
@@ -52,7 +53,7 @@ class NerExecDevice(ExecutiveDevice):
         eval_loss = 0.0
         nb_eval_steps = 0
         pbar = ProgressBar(n_total=len(eval_dataloader), desc="Evaluating")
-        if isinstance(model, nn.DataParallel):
+        if isinstance(model, nn.DataParallel) or isinstance(model,BalancedDataParallel):
             model = model.module
         for step, batch in enumerate(eval_dataloader):
             model.eval()
@@ -94,7 +95,7 @@ class NerExecDevice(ExecutiveDevice):
         output_predict_file = os.path.join(pred_output_dir, prefix, "test_prediction.json")
         pbar = ProgressBar(n_total=len(context.test_dataloader), desc="Predicting")
 
-        if isinstance(model, nn.DataParallel):
+        if isinstance(model, nn.DataParallel) or isinstance(model,BalancedDataParallel):
             model = model.module
         for step, batch in enumerate(context.test_dataloader):
             model.eval()
@@ -352,7 +353,7 @@ class SpanNerExecDevice(NerExecDevice):
 class CrfNerExecDevice(NerExecDevice):
 
     def get_eval_tags(self,model,logits,inputs):
-        if isinstance(model, nn.DataParallel):
+        if isinstance(model, nn.DataParallel) or isinstance(model,BalancedDataParallel):
             model = model.module
         tags =  model.crf.decode(logits, inputs['attention_mask'])
         tags  = tags.squeeze(0).cpu().numpy().tolist()

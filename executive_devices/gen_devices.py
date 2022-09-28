@@ -1,6 +1,7 @@
 from asyncio.log import logger
 from pickletools import optimize
 from callback import optimizater
+from callback.balance_dataparallel import BalancedDataParallel
 from callback.progressbar import ProgressBar
 from executive_devices.devices_inter import ExecutiveDevice
 import torch
@@ -54,7 +55,7 @@ class GenExecDevice(ExecutiveDevice):
         eval_loss = 0.0
         nb_eval_steps = 0
         pbar = ProgressBar(n_total=len(eval_dataloader), desc="Evaluating")
-        if isinstance(model, nn.DataParallel):
+        if isinstance(model, nn.DataParallel) or isinstance(model,BalancedDataParallel):
             model = model.module
         for step, batch in enumerate(eval_dataloader):
             model.eval()
@@ -150,6 +151,7 @@ class GenExecDevice(ExecutiveDevice):
         args = context_config.base
         
         batch = tuple(t.to(context.device) for t in batch)
+        # batch = tuple(t.cuda() for t in batch)
         inputs = self.get_model_input(batch,'train')
         
         outputs = model(**inputs)
