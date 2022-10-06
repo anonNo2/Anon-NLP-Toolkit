@@ -75,6 +75,18 @@ class ExecutiveDevice():
                 context.scheduler = get_linear_schedule_with_warmup(context.optimizer, num_warmup_steps=shard_warmup_steps,
                                                             num_training_steps=context_config.big_data.big_data_total_step)
                 logger.info(f'分片训练初始化优化器，预热步数:{shard_warmup_steps},总步数:{context_config.big_data.big_data_total_step}')
+
+
+
+                if context.get('reload_model_path') and os.path.isfile(os.path.join(context.reload_model_path, "optimizer.pt")) and os.path.isfile(
+                        os.path.join(context.reload_model_path, "scheduler.pt")) :
+                    logger.info(f'当前重置模型目录为:{context.reload_model_path},其下包含optimizer和scheduler参数，尝试加载')
+                    try:
+                        context.optimizer.load_state_dict(torch.load(os.path.join(context.reload_model_path, "optimizer.pt")))
+                        context.scheduler.load_state_dict(torch.load(os.path.join(context.reload_model_path, "scheduler.pt")))
+                    except Exception as e:
+                        logger.info(f'尝试加载失败,{str(e)}')
+                    logger.info(f'尝试加载成功')
             else:
                 logger.info(f'当前步数:{global_step},不重新初始化优化器')
 
@@ -89,11 +101,12 @@ class ExecutiveDevice():
 
         # Check if saved optimizer or scheduler states exist
         if os.path.isfile(os.path.join(args.model_name_or_path, "optimizer.pt")) and os.path.isfile(
-                os.path.join(args.model_name_or_path, "scheduler.pt")):
+                os.path.join(args.model_name_or_path, "scheduler.pt")) and global_step == 0:
             # Load in optimizer and scheduler states
             context.optimizer.load_state_dict(torch.load(os.path.join(args.model_name_or_path, "optimizer.pt")))
             context.scheduler.load_state_dict(torch.load(os.path.join(args.model_name_or_path, "scheduler.pt")))
-            
+        
+
 
         if args.fp16:
             try:

@@ -8,6 +8,7 @@ Description:
 
 Copyright (c) 2022 by anon/Ultrapower, All Rights Reserved. 
 '''
+
 from statistics import mean
 from nltk import word_tokenize
 from nltk.translate.bleu_score import corpus_bleu
@@ -80,7 +81,12 @@ def calculate_rouge_score(reference, hypothesis):
         ref = [i for i in ref if len(i) > 0]
         if not len(hyp) or not len(ref):
             continue
-        scores.append(rouge.get_scores(' '.join([i for i in hyp]), ' '.join([i for i in ref])))
+        try:
+            scores.append(rouge.get_scores(' '.join([i for i in hyp]), ' '.join([i for i in ref])))
+        except Exception:
+            continue
+        except RuntimeError:
+            continue
     rouge_1 = [i[0]['rouge-1']['f'] for i in scores]
     rouge_2 = [i[0]['rouge-2']['f'] for i in scores]
     rouge_l = [i[0]['rouge-l']['f'] for i in scores]
@@ -172,6 +178,6 @@ def cal_metrics(machine_gen_file):
 if __name__ == '__main__':
     
 
-    print(cal_metrics())
+    print(cal_metrics('/data/anon/output_dir/GPT_GPT-ConditionalGeneration-QA/gen_QA_GPT_V3/checkpoint_dir/checkpoint-0/eval_machine_metric_data.json'))
 
     

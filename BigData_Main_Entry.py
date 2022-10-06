@@ -277,6 +277,7 @@ class MainController():
                 model_path = load_dir
                 context.continue_step = max_global_step
                 self.logger.info(f" 加载模型将更为为:{load_dir}")
+                args.context.reload_model_path = model_path
 
             
 
@@ -446,7 +447,7 @@ class MainController():
             self.load_dev_and_predict_datasets()
             if self.config.big_data.shuffle_before_split:
                 shuffle(examples)
-            for idx in range(0,len(examples),shard_size):
+            for idx in range(self.config.big_data.start_shard_idx,len(examples),shard_size):
                 shard_examples = examples[idx:idx + shard_size]
                 self.config.context.train_dataset = self.covert_examples_to_tensors(task_name, tokenizer,
                                                                             shard_examples,label_list, 
@@ -471,4 +472,4 @@ class MainController():
 
 
 if __name__ == "__main__":
-    MainController('/data1/anon/Anon-NLP-Toolkit/configs_bigdata/Gen_GPT_QA_conf_medical_v3.yaml')()
+    MainController('/data1/anon/Anon-NLP-Toolkit/configs_bigdata/Gen_GPT_QA_conf_medical_v4.yaml')()
