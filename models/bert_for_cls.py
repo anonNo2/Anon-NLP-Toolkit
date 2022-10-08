@@ -1,8 +1,11 @@
+import imp
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from .layers.crf import CRF
-from transformers import BertModel,BertPreTrainedModel
+from transformers import BertPreTrainedModel
+# from transformers import BertModel
+from models.ptm_models.nature_embd_bert import BertModel
 from .layers.linears import PoolerEndLogits, PoolerStartLogits
 from torch.nn import CrossEntropyLoss
 from losses.focal_loss import FocalLoss
@@ -18,8 +21,8 @@ class BertForNormalCls(BertPreTrainedModel):
         self.loss_type = config.loss_type
         self.init_weights()
 
-    def forward(self, input_ids, attention_mask=None, token_type_ids=None,labels=None):
-        outputs = self.bert(input_ids = input_ids,attention_mask=attention_mask,token_type_ids=token_type_ids)
+    def forward(self, input_ids, attention_mask=None, token_type_ids=None,labels=None,nature_ids=None):
+        outputs = self.bert(input_ids = input_ids,attention_mask=attention_mask,token_type_ids=token_type_ids,nature_ids=nature_ids)
         sequence_output = outputs[1]
         sequence_output = self.dropout(sequence_output)
         logits = self.classifier(sequence_output)

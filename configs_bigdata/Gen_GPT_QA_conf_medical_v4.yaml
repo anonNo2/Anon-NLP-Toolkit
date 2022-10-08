@@ -6,11 +6,11 @@ model: GPT
 struct: GPT-ConditionalGeneration-QA
 # required params (常规必备参数)
 base: 
-  task_name: gen_test_QA_GPT_V2
-  data_dir: /data1/anon/Anon-NLP-Toolkit/datasets/gen_QA/medical_QA_simplify_test
+  task_name: gen_QA_GPT_V4
+  data_dir: /data1/anon/Anon-NLP-Toolkit/datasets/gen_QA/medical_QA_simplify
   model_name_or_path: /data1/PRETRAIN_MODEL/gpt2-chinese-cluecorpussmall
-  output_dir: /data/anon/output_dir
-  cache_dir: /data/anon/cache_dir
+  output_dir: /data1/anon/output_dir
+  cache_dir: /data1/anon/cache_dir
   # 是否输出数据例子
   print_data_examples: false
   # 在QA中作为答案最大长度
@@ -23,11 +23,11 @@ base:
   do_eval: false
   do_predict: false
   # 是否需要对初始状态的模型进行评估
-  need_init_model_evaluate: true
+  need_init_model_evaluate: false
   evaluate_during_training: true
   do_lower_case: true
-  per_gpu_train_batch_size: 16
-  per_gpu_eval_batch_size: 16
+  per_gpu_train_batch_size: 12
+  per_gpu_eval_batch_size: 12
   gradient_accumulation_steps: 1
   learning_rate: 0.0001
   weight_decay: 0.01
@@ -37,7 +37,8 @@ base:
   max_steps: -1
   warmup_proportion: 0.1
   logging_steps: -1
-  save_steps: 150
+  save_steps: 4418
+  # save_steps: 50
   eval_all_checkpoints: false
   predict_checkpoints: 40
   no_cuda: false
@@ -56,15 +57,17 @@ big_data:
   # 训练数据集是否需要分片
   need_split_shard: true
   # 训练数据集的分片大小
-  shard_size: 10000
+  shard_size: 100000
   # 分片前是否需要shuffle
   shuffle_before_split: true
   # 大数据的总步数(需要自己计算)
-  big_data_total_step: 100000
+  big_data_total_step: 441808
+
+  start_shard_idx: 0
 
 
 n_gpu_balance:
-  first_gpu_batch_size : 4
+  first_gpu_batch_size : 1
 
 
 # (adversarial training params) 对抗训练参数

@@ -1,5 +1,6 @@
 from pickletools import optimize
 from callback import optimizater
+from callback.balance_dataparallel import BalancedDataParallel
 from callback.progressbar import ProgressBar
 from executive_devices.devices_inter import ExecutiveDevice
 import torch
@@ -22,7 +23,10 @@ class ClsExecDevice(ExecutiveDevice):
         raise NotImplementedError()
     
     def get_model_input(self,batch,type):
-        return {"input_ids": batch[0], "attention_mask": batch[1], "labels": batch[3] if type != 'predict' else None}
+        model_input = {"input_ids": batch[0], "attention_mask": batch[1], "labels": batch[3] if type != 'predict' else None}
+        if len(batch) == 6:
+            model_input["nature_ids"] = batch[5]
+        return model_input
     
     def get_metrics(self,context_config):
         raise NotImplementedError()
@@ -52,7 +56,7 @@ class ClsExecDevice(ExecutiveDevice):
         eval_loss = 0.0
         nb_eval_steps = 0
         pbar = ProgressBar(n_total=len(eval_dataloader), desc="Evaluating")
-        if isinstance(model, nn.DataParallel):
+        if isinstance(model, nn.DataParallel) or isinstance(model,BalancedDataParallel):
             model = model.module
         for step, batch in enumerate(eval_dataloader):
             model.eval()
@@ -90,7 +94,7 @@ class ClsExecDevice(ExecutiveDevice):
         output_predict_file = os.path.join(pred_output_dir, prefix, "test_prediction.json")
         pbar = ProgressBar(n_total=len(context.test_dataloader), desc="Predicting")
 
-        if isinstance(model, nn.DataParallel):
+        if isinstance(model, nn.DataParallel) or isinstance(model,BalancedDataParallel):
             model = model.module
         for step, batch in enumerate(context.test_dataloader):
             model.eval()
@@ -131,7 +135,11 @@ class ClsExecDevice(ExecutiveDevice):
                 if args.local_rank in [-1, 0] and args.logging_steps > 0 and context.global_step % args.logging_steps == 0:
                     if args.local_rank == -1:
                         # Only evaluate when single GPU otherwise metrics may not average well
-                        self.eval_step(context_config,args.task_name)
+                        results = self.eval_step(context_config,args.task_name)
+                        output_dir = os.path.join(context_config.context.output_dir,"checkpoint_dir" ,"checkpoint-{}".format(context_config.context.global_step))
+                        if not os.path.exists(output_dir):
+                            os.makedirs(output_dir)
+                        io.open(os.path.join(output_dir,'eval_scores.json'),'w').write(json.dumps(results,ensure_ascii=False,indent=4))
                 if args.local_rank in [-1, 0] and args.save_steps > 0 and context.global_step % args.save_steps == 0:
                     self.save_ckpt(context_config,model)
 

@@ -2,15 +2,17 @@
 language: zh
 # task type(ner,cls,generate)
 type: GEN
+# 模型类型(选择见主入口)
 model: GPT
+# 模型结构(选择见主入口)
 struct: GPT-ConditionalGeneration-QA
 # required params (常规必备参数)
 base: 
-  task_name: gen_test_QA_GPT_V2
-  data_dir: /data1/anon/Anon-NLP-Toolkit/datasets/gen_QA/medical_QA_simplify_test
+  task_name: gen_QA_GPT_V4
+  data_dir: /data1/anon/anon-nlp-toolkit/datasets/gen_QA/medical_QA_simplify_test
   model_name_or_path: /data1/PRETRAIN_MODEL/gpt2-chinese-cluecorpussmall
-  output_dir: /data/anon/output_dir
-  cache_dir: /data/anon/cache_dir
+  output_dir: /data1/anon/output_dir
+  cache_dir: /data1/anon/cache_dir
   # 是否输出数据例子
   print_data_examples: false
   # 在QA中作为答案最大长度
@@ -25,9 +27,10 @@ base:
   # 是否需要对初始状态的模型进行评估
   need_init_model_evaluate: true
   evaluate_during_training: true
+  # 常规finetune参数
   do_lower_case: true
-  per_gpu_train_batch_size: 16
-  per_gpu_eval_batch_size: 16
+  per_gpu_train_batch_size: 12
+  per_gpu_eval_batch_size: 12
   gradient_accumulation_steps: 1
   learning_rate: 0.0001
   weight_decay: 0.01
@@ -37,14 +40,14 @@ base:
   max_steps: -1
   warmup_proportion: 0.1
   logging_steps: -1
-  save_steps: 150
+  save_steps: 50
   eval_all_checkpoints: false
   predict_checkpoints: 40
   no_cuda: false
   overwrite_output_dir: true
-  # 是否需要继续训练（设置true时 overwrite_output_dir不生效）
-  continue_train: true
-  overwrite_cache: false
+  # 是否需要继续训练-当输出目录与任务名称一致时，会基于最后一个ckpt继续训练（设置true时 overwrite_output_dir不生效）
+  continue_train: false
+  overwrite_cache: true
   seed: 42
   fp16: false
   fp16_opt_level: O1
@@ -56,15 +59,18 @@ big_data:
   # 训练数据集是否需要分片
   need_split_shard: true
   # 训练数据集的分片大小
-  shard_size: 10000
+  shard_size: 100000
   # 分片前是否需要shuffle
   shuffle_before_split: true
   # 大数据的总步数(需要自己计算)
-  big_data_total_step: 100000
+  big_data_total_step: 441808
+  # 从第几条数据开始读取（与continue_train配合使用）
+  start_shard_idx: 0
 
 
 n_gpu_balance:
-  first_gpu_batch_size : 4
+  # 当有多个GPU时第一个GPU的batch-size数
+  first_gpu_batch_size : 1
 
 
 # (adversarial training params) 对抗训练参数

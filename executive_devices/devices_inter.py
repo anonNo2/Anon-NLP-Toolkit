@@ -3,11 +3,12 @@ from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, Tenso
 from torch.utils.data.distributed import DistributedSampler
 import torch
 from callback.adversarial import FGM
+from callback.balance_dataparallel import BalancedDataParallel
 from callback.optimizater.adamw import AdamW
 from callback.lr_scheduler import get_linear_schedule_with_warmup
 from callback.progressbar import ProgressBar
 import os
-
+import torch.nn as nn
 class ExecutiveDevice():
 
     '''
@@ -45,6 +46,15 @@ class ExecutiveDevice():
         logger = context.logger
         model = context.model
 
+
+        if isinstance(model, nn.DataParallel):
+            model = model.module
+        elif isinstance(model, torch.nn.parallel.DistributedDataParallel):
+            model = model.module
+        elif isinstance(model,BalancedDataParallel):
+            model = model.module
+
+
         context.train_batch_size = args.per_gpu_train_batch_size * max(1, context.n_gpu)
         context.train_sampler = RandomSampler(context.train_dataset) if args.local_rank == -1 else DistributedSampler(context.train_dataset)
         context.train_dataloader = DataLoader(context.train_dataset, sampler=context.train_sampler, batch_size=context.train_batch_size,
@@ -65,6 +75,18 @@ class ExecutiveDevice():
                 context.scheduler = get_linear_schedule_with_warmup(context.optimizer, num_warmup_steps=shard_warmup_steps,
                                                             num_training_steps=context_config.big_data.big_data_total_step)
                 logger.info(f'分片训练初始化优化器，预热步数:{shard_warmup_steps},总步数:{context_config.big_data.big_data_total_step}')
+
+
+
+                if context.get('reload_model_path') and os.path.isfile(os.path.join(context.reload_model_path, "optimizer.pt")) and os.path.isfile(
+                        os.path.join(context.reload_model_path, "scheduler.pt")) :
+                    logger.info(f'当前重置模型目录为:{context.reload_model_path},其下包含optimizer和scheduler参数，尝试加载')
+                    try:
+                        context.optimizer.load_state_dict(torch.load(os.path.join(context.reload_model_path, "optimizer.pt")))
+                        context.scheduler.load_state_dict(torch.load(os.path.join(context.reload_model_path, "scheduler.pt")))
+                    except Exception as e:
+                        logger.info(f'尝试加载失败,{str(e)}')
+                    logger.info(f'尝试加载成功')
             else:
                 logger.info(f'当前步数:{global_step},不重新初始化优化器')
 
@@ -79,11 +101,12 @@ class ExecutiveDevice():
 
         # Check if saved optimizer or scheduler states exist
         if os.path.isfile(os.path.join(args.model_name_or_path, "optimizer.pt")) and os.path.isfile(
-                os.path.join(args.model_name_or_path, "scheduler.pt")):
+                os.path.join(args.model_name_or_path, "scheduler.pt")) and global_step == 0:
             # Load in optimizer and scheduler states
             context.optimizer.load_state_dict(torch.load(os.path.join(args.model_name_or_path, "optimizer.pt")))
             context.scheduler.load_state_dict(torch.load(os.path.join(args.model_name_or_path, "scheduler.pt")))
-            
+        
+
 
         if args.fp16:
             try:
@@ -93,7 +116,11 @@ class ExecutiveDevice():
             model, optimizer = amp.initialize(model, optimizer, opt_level=args.fp16_opt_level)
         # multi-gpu training (should be after apex fp16 initialization)
         if context.n_gpu > 1:
-            context.model = torch.nn.DataParallel(model)
+            if 'n_gpu_balance' in context_config and context_config.n_gpu_balance.first_gpu_batch_size != args.per_gpu_train_batch_size:
+                logger.info(f'多GPU-{context.n_gpu}，使用平衡性并行训练器')
+                context.model = BalancedDataParallel(context_config.n_gpu_balance.first_gpu_batch_size, model, dim=0)
+            else:
+                context.model = torch.nn.DataParallel(model)
         # Distributed training (should be after apex fp16 initialization)
         if args.local_rank != -1:
             context.model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.local_rank],
@@ -105,7 +132,7 @@ class ExecutiveDevice():
         logger.info(f"***** Running training {context.shard_start}~{context.shard_end}*****")
         logger.info(f"  Num examples = {len(context.train_dataset)}")
         logger.info(f"  Num Epochs = {args.num_train_epochs}")
-        logger.info(f"  Instantaneous batch size per GPU = {args.per_gpu_train_batch_size}")
+        logger.info(f"  Instantaneous batch size per GPU = {args.per_gpu_train_batch_size},GPU nums = {context.n_gpu}")
 
         total_train_batch_size = context.train_batch_size * args.gradient_accumulation_steps * (torch.distributed.get_world_size() if args.local_rank != -1 else 1)
         logger.info(f"  Total train batch size (w. parallel, distributed & accumulation) = {total_train_batch_size}")

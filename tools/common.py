@@ -9,6 +9,8 @@ from collections import OrderedDict
 from pathlib import Path
 import logging
 
+from callback.balance_dataparallel import BalancedDataParallel
+
 
 
 def seed_everything(seed=1029):
@@ -87,7 +89,7 @@ def restore_checkpoint(resume_path, model=None):
     best = checkpoint['best']
     start_epoch = checkpoint['epoch'] + 1
     states = checkpoint['state_dict']
-    if isinstance(model, nn.DataParallel):
+    if isinstance(model, nn.DataParallel) or isinstance(model,BalancedDataParallel): 
         model.module.load_state_dict(states)
     else:
         model.load_state_dict(states)
@@ -192,7 +194,7 @@ def save_model(model, model_path):
     """
     if isinstance(model_path, Path):
         model_path = str(model_path)
-    if isinstance(model, nn.DataParallel):
+    if isinstance(model, nn.DataParallel) or isinstance(model,BalancedDataParallel):
         model = model.module
     state_dict = model.state_dict()
     for key in state_dict:
@@ -213,7 +215,7 @@ def load_model(model, model_path):
     logging.info(f"loading model from {str(model_path)} .")
     states = torch.load(model_path)
     state = states['state_dict']
-    if isinstance(model, nn.DataParallel):
+    if isinstance(model, nn.DataParallel) or isinstance(model,BalancedDataParallel):
         model.module.load_state_dict(state)
     else:
         model.load_state_dict(state)

@@ -1,4 +1,5 @@
 """ Named entity recognition fine-tuning: utilities to work with CLUENER task. """
+from sklearn import naive_bayes
 import torch
 import logging
 import os,io
@@ -8,6 +9,8 @@ from torch.utils.data import TensorDataset
 from data_augments.cls_enhancer import ClsEnhancer
 from processors.common_processor_inter import DataProcessor
 from processors.commmon_examples import LabelInputExample,LabelInputFeatures
+import jieba
+import jieba.posseg as pseg
 
 logger = logging.getLogger(__name__)
 
@@ -58,8 +61,8 @@ class AutoClsProcessor(DataProcessor):
         examples = []
         for (i, line) in enumerate(lines):
             guid = "%s-%s" % (set_type, i)
-            text_a= line['text']
-            # BIOS
+            text_a= line['text'].replace('\n','')
+            
             labels = line['label']
             examples.append(LabelInputExample(guid=guid, text_a=text_a, labels=labels))
         return examples
@@ -81,7 +84,8 @@ class AutoClsProcessor(DataProcessor):
                 logger.info("Writing example %d of %d", ex_index, len(examples))
             if isinstance(example.text_a,list):
                 example.text_a = " ".join(example.text_a)
-            tokens = tokenizer.tokenize(example.text_a)
+            # tokens = tokenizer.tokenize(example.text_a)
+            tokens = [i for i in example.text_a]
             label_ids = label_map[example.labels] if example.labels != -1 else -1
             label_ids = [1.0 if i == label_ids else 0.0 for i in range(len(label_list))]
             # Account for [CLS] and [SEP] with "- 2".
@@ -108,20 +112,49 @@ class AutoClsProcessor(DataProcessor):
             # For classification tasks, the first vector (corresponding to [CLS]) is
             # used as as the "sentence vector". Note that this only makes sense because
             # the entire model is fine-tuned.
+            need_nature_feature = False
+            if self.args.get('nature_embed') and self.args.nature_embed.get('do_nature_embed'):
+                nature_list = io.open(os.path.join(self.args.base.model_name_or_path,'nature_list.txt'),'r').read().split('\n')
+                nature_dict = {nature_list[i]:i for i in range(len(nature_list))}
+                need_nature_feature = True
+                nature_list = []
+                words_nature = pseg.cut(''.join(tokens))
+                expand_w_n = [[word, flag] for word,flag in words_nature]
+                for item in expand_w_n:
+                    chars = item[0]
+                    nature = item[1]
+                    
+                    nature_list.append(f'B-{nature}')
+                    
+                    for _ in range(1,len(chars)):
+                        nature_list.append(f'I-{nature}')
+                
+
+
             tokens += [sep_token]
+            if need_nature_feature:
+                nature_list.append('B-END')
             
             segment_ids = [sequence_a_segment_id] * len(tokens)
 
             if cls_token_at_end:
                 tokens += [cls_token]
+                if need_nature_feature:
+                    nature_list += ['B-START']
                 
                 segment_ids += [cls_token_segment_id]
             else:
                 tokens = [cls_token] + tokens
+
+                if need_nature_feature:
+                    nature_list = ['B-START'] + nature_list
                 
                 segment_ids = [cls_token_segment_id] + segment_ids
 
             input_ids = tokenizer.convert_tokens_to_ids(tokens)
+
+            if need_nature_feature:
+                nature_ids = [nature_dict[i] for i in nature_list]
             # The mask has 1 for real tokens and 0 for padding tokens. Only real
             # tokens are attended to.
             input_mask = [1 if mask_padding_with_zero else 0] * len(input_ids)
@@ -132,11 +165,17 @@ class AutoClsProcessor(DataProcessor):
                 input_ids = ([pad_token] * padding_length) + input_ids
                 input_mask = ([0 if mask_padding_with_zero else 1] * padding_length) + input_mask
                 segment_ids = ([pad_token_segment_id] * padding_length) + segment_ids
+
+                if need_nature_feature:
+                    nature_ids = [nature_dict.get('B-PAD')] * padding_length + nature_ids
                 
             else:
                 input_ids += [pad_token] * padding_length
                 input_mask += [0 if mask_padding_with_zero else 1] * padding_length
                 segment_ids += [pad_token_segment_id] * padding_length
+
+                if need_nature_feature:
+                    nature_ids += [nature_dict.get('B-PAD')] * padding_length
                 
 
             assert len(input_ids) == max_seq_length
@@ -151,9 +190,13 @@ class AutoClsProcessor(DataProcessor):
                 logger.info("input_mask: %s", " ".join([str(x) for x in input_mask]))
                 logger.info("segment_ids: %s", " ".join([str(x) for x in segment_ids]))
                 logger.info("label_ids: %s", " ".join(str(label_ids)))
+                if need_nature_feature:
+                    logger.info("nature_ids: %s", " ".join([str(x) for x in nature_ids]))
+
+
 
             features.append(LabelInputFeatures(input_ids=input_ids, input_mask=input_mask,
-                                        segment_ids=segment_ids, label_ids=label_ids,input_len=input_lens))
+                                        segment_ids=segment_ids, label_ids=label_ids,input_len=input_lens,nature_feature_ids=nature_ids if need_nature_feature else None))
         return features
 
     def train_collate_fn(self,batch):
@@ -161,13 +204,24 @@ class AutoClsProcessor(DataProcessor):
         batch should be a list of (sequence, target, length) tuples...
         Returns a padded tensor of sequences sorted from longest to shortest,
         """
-        all_input_ids, all_attention_mask, all_token_type_ids, all_lens, all_labels = map(torch.stack, zip(*batch))
-        max_len = max(all_lens).item()
-        all_input_ids = all_input_ids[:, :max_len]
-        all_attention_mask = all_attention_mask[:, :max_len]
-        all_token_type_ids = all_token_type_ids[:, :max_len]
-        all_labels = all_labels
-        return all_input_ids, all_attention_mask, all_token_type_ids, all_labels,all_lens
+        if self.args.get('nature_embed') and self.args.nature_embed.get('do_nature_embed'):
+            all_input_ids, all_attention_mask, all_token_type_ids, all_lens, all_labels,all_nature = map(torch.stack, zip(*batch))
+            max_len = max(all_lens).item()
+            all_input_ids = all_input_ids[:, :max_len]
+            all_nature_ids = all_nature[:,:max_len]
+            all_attention_mask = all_attention_mask[:, :max_len]
+            all_token_type_ids = all_token_type_ids[:, :max_len]
+            all_labels = all_labels
+            return all_input_ids, all_attention_mask, all_token_type_ids, all_labels,all_lens,all_nature_ids
+        else:
+
+            all_input_ids, all_attention_mask, all_token_type_ids, all_lens, all_labels = map(torch.stack, zip(*batch))
+            max_len = max(all_lens).item()
+            all_input_ids = all_input_ids[:, :max_len]
+            all_attention_mask = all_attention_mask[:, :max_len]
+            all_token_type_ids = all_token_type_ids[:, :max_len]
+            all_labels = all_labels
+            return all_input_ids, all_attention_mask, all_token_type_ids, all_labels,all_lens
     
     def dev_collate_fn(self,batch):
         return self.train_collate_fn(batch)
@@ -182,7 +236,12 @@ class AutoClsProcessor(DataProcessor):
         all_segment_ids = torch.tensor([f.segment_ids for f in features], dtype=torch.long)
         all_label_ids = torch.tensor([f.label_ids for f in features], dtype=torch.float)
         all_lens = torch.tensor([f.input_len for f in features], dtype=torch.long)
-        dataset = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_lens, all_label_ids)
+        if self.args.get('nature_embed') and self.args.nature_embed.get('do_nature_embed'):
+            all_nature_ids = torch.tensor([f.nature_feature_ids for f in features], dtype=torch.long)
+            dataset = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_lens, all_label_ids,all_nature_ids)
+        else:
+            dataset = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_lens, all_label_ids)
+        
         return dataset
 
 
