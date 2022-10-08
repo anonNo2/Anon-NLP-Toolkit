@@ -1,0 +1,100 @@
+# language (日志啥的语言类型)
+language: zh
+# task type(ner,cls,generate)
+type: CLS
+model: bert
+struct: bertSoftmax
+# required params (常规必备参数)
+base: 
+  task_name: cls_WaiMai_2Label_with_nature
+  data_dir: /data1/anon/anon-nlp-toolkit/datasets/cls/waimai_csv
+  model_name_or_path: /data1/PRETRAIN_MODEL/bert-base-chinese-with-nature
+  output_dir: /data1/anon/outputs/cls_waimai_c
+  cache_dir: /data1/anon/outputs/cache
+  # 是否输出数据例子
+  print_data_examples: false
+  train_max_seq_len: 128
+  eval_max_seq_len: 128
+  do_train: true
+  do_eval: false
+  do_predict: false
+  evaluate_during_training: true
+  do_lower_case: true
+  per_gpu_train_batch_size: 32
+  per_gpu_eval_batch_size: 32
+  gradient_accumulation_steps: 1
+  learning_rate: 0.00002
+  weight_decay: 0.01
+  adam_epsilon: 0.00000001
+  max_grad_norm: 1.0
+  num_train_epochs: 3
+  max_steps: -1
+  warmup_proportion: 0.1
+  logging_steps: 100
+  save_steps: 100
+  eval_all_checkpoints: false
+  predict_checkpoints: -1
+  no_cuda: false
+  overwrite_output_dir: true
+  # 是否需要继续训练-当输出目录与任务名称一致时，会基于最后一个ckpt继续训练（设置true时 overwrite_output_dir不生效）
+  continue_train: false
+  overwrite_cache: true
+  seed: 42
+  fp16: false
+  fp16_opt_level: O1
+  local_rank: -1
+  server_ip:
+  server_port:
+
+
+# 过大数据集分片训练设置
+big_data:
+  # 训练数据集是否需要分片
+  need_split_shard: false
+  # 训练数据集的分片大小
+  shard_size: 100000
+  # 分片前是否需要shuffle
+  shuffle_before_split: true
+  # 大数据的总步数(需要自己计算)
+  big_data_total_step: 441808
+  # 从第几条数据开始读取（与continue_train配合使用）
+  start_shard_idx: 0
+
+
+n_gpu_balance:
+  # 当有多个GPU时第一个GPU的batch-size数
+  first_gpu_batch_size : 1
+
+# (adversarial training params) 对抗训练参数
+adversarial:
+  do_adv: true
+  adv_epsilon: 1.0
+  adv_name: word_embeddings
+
+
+nature_embed:
+  do_nature_embed: true
+
+data_augments:
+  do_aug: false
+  # (DM,EDA,Back_Translation,Over_Sample) 未完成
+  aug_function: EDA
+  #  (MAX,MEAN,or a int type number)
+  # MAX : 所有标签数据条数都照最大数据条目类别靠齐
+  # MEAN : 所有标签下数据条目对准各各标签条目数的平均，多余数据将会随机删除
+  # int: 传入int类型的数据，则所有标签下数据条数都调整为该数值，多余数据将会随机删除
+  aug_baseline:  MAX
+
+# cls training (cls 独有参数)
+cls_special:
+  loss_type: ce
+  
+
+
+
+  
+
+
+
+
+  

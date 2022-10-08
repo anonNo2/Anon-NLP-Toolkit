@@ -472,4 +472,11 @@ class MainController():
 
 
 if __name__ == "__main__":
-    MainController('/data1/anon/Anon-NLP-Toolkit/configs_bigdata/Gen_GPT_QA_conf_medical_v4.yaml')()
+    import argparse
+    parser = argparse.ArgumentParser(description='指定配置')
+    #type是要传入的参数的数据类型  help是该参数的提示信息
+    parser.add_argument('conf_file', type=str, help='配置文件')
+
+    args = parser.parse_args()
+
+    MainController(args.conf_file)()
