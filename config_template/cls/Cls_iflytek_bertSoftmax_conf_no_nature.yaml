@@ -7,7 +7,7 @@ struct: bertSoftmax
 # required params (常规必备参数)
 base: 
   task_name: cls_iflytek_2Label_no_nature
-  data_dir: /data1/anon/anon-nlp-toolkit/datasets/cls/iflytek
+  data_dir: /data1/anon/Anon-NLP-Toolkit/datasets/cls/iflytek
   model_name_or_path: /data1/PRETRAIN_MODEL/bert-base-chinese
   output_dir: /data1/anon/outputs/cls_waimai_c
   cache_dir: /data1/anon/outputs/cache

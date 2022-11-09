@@ -10,7 +10,7 @@ Copyright (c) 2022 by anon/Ultrapower, All Rights Reserved.
 '''
 import glob
 import logging
-import os
+import os,io
 import json
 from random import shuffle
 import time
@@ -156,7 +156,7 @@ class MainController():
                 
                 logger.info(f"将特征文件保存在{cached_features_file}",f"Saving features into cached file {cached_features_file}")
                 # 暂时，因为这个存取似乎比解析还慢
-                # torch.save(features, cached_features_file)
+                torch.save(features, cached_features_file)
         if args.base.local_rank == 0 :
             torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
         # Convert to Tensors and build dataset
@@ -422,7 +422,8 @@ class MainController():
                 args.context.exe_device.predict_step(self.config,prefix)
             
 
-
+        
+            
         
         
     
@@ -466,7 +467,8 @@ class MainController():
             self.main_running_step()
 
     
-        pass
+        if 'results_record' in self.config.context:
+            io.open(os.path.join(self.config.context.output_dir,'results_record.json'),'w').write(json.dumps(self.config.context.results_record,ensure_ascii=False,indent=4))
 
 
 

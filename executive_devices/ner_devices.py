@@ -23,7 +23,11 @@ class NerExecDevice(ExecutiveDevice):
         raise NotImplementedError()
     
     def get_model_input(self,batch,type):
-        return {"input_ids": batch[0], "attention_mask": batch[1], "labels": batch[3] if type != 'predict' else None}
+        model_input = {"input_ids": batch[0], "attention_mask": batch[1], "labels": batch[3] if type != 'predict' else None}
+        if len(batch) == 6:
+            model_input["nature_ids"] = batch[5]
+        return model_input
+        
     
     def get_metrics(self,context_config):
         raise NotImplementedError()
@@ -136,7 +140,13 @@ class NerExecDevice(ExecutiveDevice):
                 if args.local_rank in [-1, 0] and args.logging_steps > 0 and context.global_step % args.logging_steps == 0:
                     if args.local_rank == -1:
                         # Only evaluate when single GPU otherwise metrics may not average well
-                        self.eval_step(context_config,args.task_name)
+                        results = self.eval_step(context_config,args.task_name)
+                        results['glo_step'] = context.global_step
+                        if 'results_record' not in context:
+                            context['results_record'] = []
+                        context['results_record'].append(results)
+                        
+                            
                 if args.local_rank in [-1, 0] and args.save_steps > 0 and context.global_step % args.save_steps == 0:
                     self.save_ckpt(context_config,model)
 

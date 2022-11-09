@@ -77,13 +77,21 @@ class AutoClsProcessor(DataProcessor):
                 - True (XLNet/GPT pattern): A + [SEP] + B + [SEP] + [CLS]
             `cls_token_segment_id` define the segment id associated to the CLS token (0 for BERT, 2 for XLNet)
         """
+        need_nature_feature = False
+        if self.args.get('nature_embed') and self.args.nature_embed.get('do_nature_embed'):
+            nature_list = io.open(os.path.join(self.args.base.model_name_or_path,'nature_list.txt'),'r').read().split('\n')
+            nature_dict = {nature_list[i]:i for i in range(len(nature_list))}
+            need_nature_feature = True
+
+
+
         label_map = {label: i for i, label in enumerate(label_list)}
         features = []
         for (ex_index, example) in enumerate(examples):
             if ex_index % 10000 == 0:
                 logger.info("Writing example %d of %d", ex_index, len(examples))
             if isinstance(example.text_a,list):
-                example.text_a = " ".join(example.text_a)
+                example.text_a = "".join(example.text_a)
             # tokens = tokenizer.tokenize(example.text_a)
             tokens = [i for i in example.text_a]
             label_ids = label_map[example.labels] if example.labels != -1 else -1
@@ -112,11 +120,9 @@ class AutoClsProcessor(DataProcessor):
             # For classification tasks, the first vector (corresponding to [CLS]) is
             # used as as the "sentence vector". Note that this only makes sense because
             # the entire model is fine-tuned.
-            need_nature_feature = False
-            if self.args.get('nature_embed') and self.args.nature_embed.get('do_nature_embed'):
-                nature_list = io.open(os.path.join(self.args.base.model_name_or_path,'nature_list.txt'),'r').read().split('\n')
-                nature_dict = {nature_list[i]:i for i in range(len(nature_list))}
-                need_nature_feature = True
+            
+            if need_nature_feature:
+                
                 nature_list = []
                 words_nature = pseg.cut(''.join(tokens))
                 expand_w_n = [[word, flag] for word,flag in words_nature]
