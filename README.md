@@ -4,7 +4,7 @@
 
 ------
 
-PS:目前还是半成品哈，基本搞完了会删掉这行
+
 
 #### 说明：
 
@@ -20,13 +20,16 @@ PS:目前还是半成品哈，基本搞完了会删掉这行
 
 **已完成：**
 
-| 任务         | 预训练模型                                                   | 结构          | 数据集示例 | Yaml示例 |
-| ------------ | ------------------------------------------------------------ | ------------- | ---------- | -------- |
-| 命名实体识别 | [bert-base-chinese](https://huggingface.co/ckiplab/bert-base-chinese) | bertBiLSTMCrf |            |          |
-| 命名实体识别 | [bert-base-chinese](https://huggingface.co/ckiplab/bert-base-chinese) | bertCrf       |            |          |
-| 命名实体识别 | [bert-base-chinese](https://huggingface.co/ckiplab/bert-base-chinese) | bertSoftmax   |            |          |
-| 命名实体识别 | [bert-base-chinese](https://huggingface.co/ckiplab/bert-base-chinese) | bertSpan      |            |          |
-| 分类         | [bert-base-chinese](https://huggingface.co/ckiplab/bert-base-chinese) | bertSoftmax   |            |          |
+| 任务         | 预训练模型                                                   | 结构                              | 数据集示例 | Yaml示例 |
+| ------------ | ------------------------------------------------------------ | --------------------------------- | ---------- | -------- |
+| 命名实体识别 | [bert-base-chinese](https://huggingface.co/ckiplab/bert-base-chinese) | bertBiLSTMCrf                     |            |          |
+| 命名实体识别 | [bert-base-chinese](https://huggingface.co/ckiplab/bert-base-chinese) | bertCrf                           |            |          |
+| 命名实体识别 | [bert-base-chinese](https://huggingface.co/ckiplab/bert-base-chinese) | bertSoftmax                       |            |          |
+| 命名实体识别 | [bert-base-chinese](https://huggingface.co/ckiplab/bert-base-chinese) | bertSpan                          |            |          |
+| 分类         | [bert-base-chinese](https://huggingface.co/ckiplab/bert-base-chinese) | bertSoftmax                       |            |          |
+| 生成         | [t5_pegasus_torch]()                                         | T5-ConditionalGeneration-Dialogue |            |          |
+| 生成         | [t5_pegasus_torch]()                                         | T5-ConditionalGeneration-QA       |            |          |
+| 生成         | [gpt2-chinese-cluecorpussmall]()                             | GPT-ConditionalGeneration-QA      |            |          |
 
 **计划中：**
 

@@ -17,6 +17,7 @@ from nltk.translate.meteor_score import meteor_score
 from nltk.translate.bleu_score import SmoothingFunction
 from rouge import Rouge 
 import io,json
+from metrics.distinct_utils import *
 # import nltk
 # nltk.download('wordnet')
 '''
@@ -93,7 +94,18 @@ def calculate_rouge_score(reference, hypothesis):
     return mean(rouge_1),mean(rouge_2),mean(rouge_l)
 
 
-def calc_distinct_ngram(pair_list, ngram):
+
+def calc_distinct_ngram(pair_list, ngram,type='corpus'):
+    words_lists = [[j for j in i] for i in pair_list]
+    if type == 'corpus':
+        return distinct_n_corpus_level(words_lists,ngram)
+    if type == 'sentence':
+        return distinct_n_sentence_level(words_lists,ngram)
+    return None
+
+
+
+def calc_distinct_ngram_old(pair_list, ngram):
     """
     calc_distinct_ngram
     """
@@ -168,16 +180,16 @@ def cal_metrics(machine_gen_file):
         'rouge_1':rouge_scores[0] * 100,
         'rouge_2':rouge_scores[1] * 100,
         'rouge_l':rouge_scores[2] * 100,
-        'distinct_1':distinct_1 * 100,
-        'distinct_2':distinct_2 * 100
+        'distinct_1':distinct_1 ,
+        'distinct_2':distinct_2
     }
 
     return result
 
 
 if __name__ == '__main__':
-    
+    pass
 
-    print(cal_metrics('/data/anon/output_dir/GPT_GPT-ConditionalGeneration-QA/gen_QA_GPT_V3/checkpoint_dir/checkpoint-0/eval_machine_metric_data.json'))
+    # print(cal_metrics('/Users/wuxiangbo/PycharmProjects/anon-nlp-toolkit/eval_machine_metric_data.json'))
 
     
